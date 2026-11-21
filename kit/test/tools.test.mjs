@@ -97,7 +97,7 @@ test('main --tool codex: no claude CLI needed, writes only AGENTS.md, others rep
   const dir = await makeTempProject();
   const logs = [];
   const f = fakeRunner();
-  const code = await main(['--tool', 'codex', '--only', 'agents,rules', '--yes'], { projectDir: dir, env: noClaudeEnv, log: (l) => logs.push(l), isTTY: false, run: f.run });
+  const code = await main(['--tool', 'codex', '--only', 'rules,mcp', '--yes'], { projectDir: dir, env: noClaudeEnv, log: (l) => logs.push(l), isTTY: false, run: f.run });
   assert.equal(code, 0);
   assert.deepEqual((await fs.readdir(dir)).sort(), ['AGENTS.md']);
   assert.equal(f.calls.length, 0, 'no command is spawned');
@@ -110,9 +110,11 @@ test('main --tool codex: no claude CLI needed, writes only AGENTS.md, others rep
 test('main --tool claude,codex: claude layers run and codex gets skipped rows', async () => {
   const dir = await makeTempProject();
   const logs = [];
-  const code = await main(['--tool', 'claude,codex', '--only', 'agents,rules'], { projectDir: dir, env: okEnv, log: (l) => logs.push(l), isTTY: false, run: fakeRunner().run });
+  const f = fakeRunner((cmd, args) => (args[0] === 'plugin' ? { stdout: '[]' } : {}));
+  const code = await main(['--tool', 'claude,codex', '--only', 'rules,mcp', '--yes'], { projectDir: dir, env: okEnv, log: (l) => logs.push(l), isTTY: false, run: f.run });
   assert.equal(code, 0);
-  assert.equal(await exists(path.join(dir, '.claude/agents/qa.md')), true);
+  assert.ok(f.calls.some((c) => c.args[0] === 'mcp'), 'claude mcp add still runs');
+  assert.equal(await exists(path.join(dir, 'CLAUDE.md')), true);
   assert.match(logs.join('\n'), /skipped +codex \(not available for codex yet\)/);
 });
 

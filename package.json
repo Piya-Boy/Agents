@@ -8,6 +8,7 @@
   },
   "files": [
     "kit/install.mjs",
+    "kit/convert.mjs",
     "kit/kit.json",
     "kit/README.md",
     "kit/agents",

@@ -5,6 +5,7 @@ import { existsSync, realpathSync, constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseAgent, convertAgent } from './convert.mjs';
 
 const stripBom = (t) => (t.charCodeAt(0) === 0xfeff ? t.slice(1) : t);
 
@@ -264,23 +265,66 @@ async function copyNew({ layer, item, src, dest, dryRun, transform, existsDetail
   }
 }
 
+// Create-only write of generated content: never overwrites an existing destination.
+async function writeNew({ layer, item, dest, content, dryRun, existsDetail }) {
+  if (await pathExists(dest)) return { layer, item, status: 'skipped', detail: existsDetail };
+  if (dryRun) return { layer, item, status: 'dry-run' };
+  try {
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.writeFile(dest, content, { flag: 'wx' });
+    return { layer, item, status: 'installed' };
+  } catch (e) {
+    if (e.code === 'EEXIST') return { layer, item, status: 'skipped', detail: existsDetail };
+    return { layer, item, status: 'failed', detail: e.message };
+  }
+}
+
 export async function installAgents(ctx) {
   const results = [];
+  const tools = toolsOf(ctx);
   const destDir = path.join(ctx.projectDir, '.claude', 'agents');
+  const sources = [];
   for (const dir of ctx.profile.agentDirs) {
     const srcDir = path.join(ctx.kitDir, dir);
     const files = (await fs.readdir(srcDir)).filter((f) => f.endsWith('.md')).sort();
-    for (const f of files) {
+    for (const f of files) sources.push({ f, src: path.join(srcDir, f) });
+  }
+  if (tools.includes('claude')) {
+    for (const { f, src } of sources) {
       results.push(
         await copyNew({
           layer: 'agents',
           item: f,
-          src: path.join(srcDir, f),
+          src,
           dest: path.join(destDir, f),
           dryRun: ctx.opts.dryRun,
           existsDetail: 'agent exists, left untouched',
         }),
       );
+    }
+  }
+  for (const tool of tools.filter((t) => t !== 'claude')) {
+    if (tool === 'cursor' && tools.includes('claude')) {
+      // Cursor already reads .claude/agents, so a second copy would only duplicate every agent.
+      results.push({ layer: 'agents', item: 'cursor', status: 'skipped', detail: 'Cursor reads .claude/agents' });
+      continue;
+    }
+    for (const { f, src } of sources) {
+      try {
+        const out = convertAgent(tool, parseAgent(await fs.readFile(src, 'utf8')));
+        results.push(
+          await writeNew({
+            layer: 'agents',
+            item: out.path,
+            dest: path.join(ctx.projectDir, ...out.path.split('/')),
+            content: out.content,
+            dryRun: ctx.opts.dryRun,
+            existsDetail: 'agent exists, left untouched',
+          }),
+        );
+      } catch (e) {
+        results.push({ layer: 'agents', item: `${tool}:${f}`, status: 'failed', detail: e.message });
+      }
     }
   }
   return results;
@@ -692,10 +736,7 @@ export async function main(argv, deps = {}) {
     // Layers that are written only for Claude Code for now; other tools get a visible "skipped" row.
     const later = (layer) => results.push({ layer, item: others, status: 'skipped', detail: `not available for ${others} yet` });
     const claudeOnly = (layer) => results.push({ layer, item: others, status: 'skipped', detail: 'Claude Code only' });
-    if (selected('agents')) {
-      if (hasClaude) results.push(...(await installAgents(ctx)));
-      if (others) later('agents');
-    }
+    if (selected('agents')) results.push(...(await installAgents(ctx)));
     if (selected('rules')) results.push(...(await installRules(ctx)));
     if (selected('skills')) results.push(...(await installSkills(ctx)));
     if (selected('mcp') && profile.mcp.length) {
