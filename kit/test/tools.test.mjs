@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs, preflight, formatSummary, installRules, main, loadManifest, resolveProfiles, TOOLS } from '../install.mjs';
+import { parseArgs, preflight, formatSummary, installRules, installSkills, main, loadManifest, resolveProfiles, TOOLS } from '../install.mjs';
 import { makeTempProject, fakeRunner } from './helpers.mjs';
 
 const kitDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -97,7 +97,7 @@ test('main --tool codex: no claude CLI needed, writes only AGENTS.md, others rep
   const dir = await makeTempProject();
   const logs = [];
   const f = fakeRunner();
-  const code = await main(['--tool', 'codex', '--yes'], { projectDir: dir, env: noClaudeEnv, log: (l) => logs.push(l), isTTY: false, run: f.run });
+  const code = await main(['--tool', 'codex', '--only', 'agents,rules', '--yes'], { projectDir: dir, env: noClaudeEnv, log: (l) => logs.push(l), isTTY: false, run: f.run });
   assert.equal(code, 0);
   assert.deepEqual((await fs.readdir(dir)).sort(), ['AGENTS.md']);
   assert.equal(f.calls.length, 0, 'no command is spawned');
@@ -133,4 +133,87 @@ test('main without --tool is unchanged: the claude CLI is still required', async
   const code = await main(['--only', 'rules'], { projectDir: dir, env: noClaudeEnv, log: (l) => logs.push(l), isTTY: false, run: fakeRunner().run });
   assert.equal(code, 1);
   assert.match(logs.join('\n'), /claude not found on PATH/);
+});
+
+// ---- skills for the other tools: .agents/skills/ ----
+
+const named = [{ repo: 'Piya-Boy/piya-skill', skills: ['thai-natural-writing'] }];
+
+function skillsCtx(dir, run, tools, { skills = named, bundledSkills = [], dryRun = false } = {}) {
+  return {
+    kitDir,
+    projectDir: dir,
+    manifest: { skillsCli: 'skills@1.9.0' },
+    profile: { name: 'core', agentDirs: [], skills, bundledSkills, mcp: [], plugins: [] },
+    run,
+    opts: { dryRun, tools },
+    platform: 'linux',
+    log() {},
+  };
+}
+
+test('skills: each non-Claude tool uses its skills CLI agent id', async () => {
+  for (const [tool, id] of [['codex', 'codex'], ['cursor', 'cursor'], ['gemini', 'gemini-cli'], ['copilot', 'github-copilot']]) {
+    const f = fakeRunner();
+    const res = await installSkills(skillsCtx(await makeTempProject(), f.run, [tool]));
+    assert.equal(f.calls.length, 1, tool);
+    assert.deepEqual(f.calls[0].args, ['-y', 'skills@1.9.0', 'add', 'Piya-Boy/piya-skill', '--agent', id, '--skill', 'thai-natural-writing', '-y']);
+    assert.equal(res[0].item, 'thai-natural-writing', 'no suffix when Claude is not selected');
+  }
+});
+
+test('skills: several non-Claude tools share one pass into .agents/skills', async () => {
+  const f = fakeRunner();
+  await installSkills(skillsCtx(await makeTempProject(), f.run, ['codex', 'gemini']));
+  assert.equal(f.calls.length, 1);
+});
+
+test('skills: claude plus another tool runs two passes; the lock does not hide the .agents pass', async () => {
+  const dir = await makeTempProject();
+  await fs.writeFile(path.join(dir, 'skills-lock.json'), JSON.stringify({ version: 2, skills: { 'thai-natural-writing': { source: 'Piya-Boy/piya-skill' } } }));
+  const f = fakeRunner();
+  const res = await installSkills(skillsCtx(dir, f.run, ['claude', 'cursor']));
+  assert.equal(f.calls.length, 1, 'only the .agents pass runs');
+  assert.ok(f.calls[0].args.includes('cursor'));
+  assert.deepEqual(res.map((r) => [r.item, r.status]), [['thai-natural-writing', 'skipped'], ['thai-natural-writing (.agents)', 'installed']]);
+});
+
+test('skills: a skill already in .agents/skills is skipped', async () => {
+  const dir = await makeTempProject();
+  await fs.mkdir(path.join(dir, '.agents/skills/thai-natural-writing'), { recursive: true });
+  await fs.writeFile(path.join(dir, '.agents/skills/thai-natural-writing/SKILL.md'), 'x');
+  const f = fakeRunner();
+  const res = await installSkills(skillsCtx(dir, f.run, ['codex']));
+  assert.equal(f.calls.length, 0);
+  assert.equal(res[0].status, 'skipped');
+});
+
+test('skills: bundled skill is copied to .agents/skills for non-Claude tools, never to .claude', async () => {
+  const dir = await makeTempProject();
+  const res = await installSkills(skillsCtx(dir, fakeRunner().run, ['codex'], { skills: [], bundledSkills: ['software-engineer'] }));
+  assert.equal(res[0].status, 'installed');
+  assert.equal(await exists(path.join(dir, '.agents/skills/software-engineer/SKILL.md')), true);
+  assert.equal(await exists(path.join(dir, '.claude')), false);
+  const again = await installSkills(skillsCtx(dir, fakeRunner().run, ['codex'], { skills: [], bundledSkills: ['software-engineer'] }));
+  assert.equal(again[0].status, 'skipped');
+});
+
+test('skills: default tools still write .claude/skills with the claude-code agent id', async () => {
+  const f = fakeRunner();
+  const dir = await makeTempProject();
+  await installSkills(skillsCtx(dir, f.run, undefined, { skills: [], bundledSkills: ['software-engineer'] }));
+  assert.equal(await exists(path.join(dir, '.claude/skills/software-engineer/SKILL.md')), true);
+  assert.equal(await exists(path.join(dir, '.agents')), false);
+});
+
+test('main --tool codex: skills run, and the third-party prompt appears without --yes', async () => {
+  const dir = await makeTempProject();
+  const logs = [];
+  const code = await main(['--tool', 'codex', '--only', 'skills'], { projectDir: dir, env: noClaudeEnv, log: (l) => logs.push(l), isTTY: false, run: fakeRunner().run });
+  assert.equal(code, 1);
+  assert.match(logs.join('\n'), /--yes/);
+  const f = fakeRunner();
+  const code2 = await main(['--tool', 'codex', '--only', 'skills', '--yes'], { projectDir: dir, env: noClaudeEnv, log: (l) => logs.push(l), isTTY: false, run: f.run });
+  assert.equal(code2, 0);
+  assert.ok(f.calls.length > 0 && f.calls.every((c) => c.args.includes('codex')));
 });

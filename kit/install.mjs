@@ -358,15 +358,15 @@ async function readLockSkills(projectDir, log) {
   }
 }
 
-export async function installSkills(ctx) {
+async function installSkillsInto(ctx, { agentId, dirParts, useLock, suffix }) {
   const results = [];
   const dryRun = ctx.opts.dryRun;
   const platform = ctx.platform ?? process.platform;
-  const lock = await readLockSkills(ctx.projectDir, ctx.log);
-  const onDisk = (name) => pathExists(path.join(ctx.projectDir, '.claude', 'skills', name, 'SKILL.md'));
+  const lock = useLock ? await readLockSkills(ctx.projectDir, ctx.log) : {};
+  const onDisk = (name) => pathExists(path.join(ctx.projectDir, ...dirParts, name, 'SKILL.md'));
 
   const addSkill = async (repo, skill, item) => {
-    const args = ['-y', ctx.manifest.skillsCli, 'add', repo, '--agent', 'claude-code', '--skill', skill, '-y'];
+    const args = ['-y', ctx.manifest.skillsCli, 'add', repo, '--agent', agentId, '--skill', skill, '-y'];
     let r = await ctx.run('npx', args, { cwd: ctx.projectDir });
     let detail;
     if (r.code !== 0 && platform === 'win32') {
@@ -380,28 +380,45 @@ export async function installSkills(ctx) {
   for (const { repo, skills } of ctx.profile.skills) {
     for (const name of skills) {
       if (lock[name]?.source === repo || (await onDisk(name))) {
-        results.push({ layer: 'skills', item: name, status: 'skipped', detail: 'already installed' });
+        results.push({ layer: 'skills', item: name + suffix, status: 'skipped', detail: 'already installed' });
       } else {
-        results.push(await addSkill(repo, name, name));
+        results.push(await addSkill(repo, name, name + suffix));
       }
     }
   }
 
   for (const name of ctx.profile.bundledSkills) {
-    const dest = path.join(ctx.projectDir, '.claude', 'skills', name);
+    const dest = path.join(ctx.projectDir, ...dirParts, name);
     if (await pathExists(dest)) {
-      results.push({ layer: 'skills', item: name, status: 'skipped', detail: 'exists, left untouched' });
+      results.push({ layer: 'skills', item: name + suffix, status: 'skipped', detail: 'exists, left untouched' });
     } else if (dryRun) {
-      results.push({ layer: 'skills', item: name, status: 'dry-run' });
+      results.push({ layer: 'skills', item: name + suffix, status: 'dry-run' });
     } else {
       try {
         await fs.mkdir(path.dirname(dest), { recursive: true });
         await fs.cp(path.join(ctx.kitDir, 'skills', name), dest, { recursive: true, errorOnExist: true, force: false });
-        results.push({ layer: 'skills', item: name, status: 'installed' });
+        results.push({ layer: 'skills', item: name + suffix, status: 'installed' });
       } catch (e) {
-        results.push({ layer: 'skills', item: name, status: 'failed', detail: e.message });
+        results.push({ layer: 'skills', item: name + suffix, status: 'failed', detail: e.message });
       }
     }
+  }
+  return results;
+}
+
+// Skills CLI agent ids. The CLI writes `.agents/skills/`, which Codex, Cursor, Gemini CLI, and Copilot all read.
+const SKILLS_AGENT_IDS = { codex: 'codex', cursor: 'cursor', gemini: 'gemini-cli', copilot: 'github-copilot' };
+
+export async function installSkills(ctx) {
+  const tools = toolsOf(ctx);
+  const results = [];
+  if (tools.includes('claude')) {
+    results.push(...(await installSkillsInto(ctx, { agentId: 'claude-code', dirParts: ['.claude', 'skills'], useLock: true, suffix: '' })));
+  }
+  const other = tools.find((t) => t !== 'claude');
+  if (other) {
+    // The shared lock file already lists skills installed for Claude, so only the folder decides here.
+    results.push(...(await installSkillsInto(ctx, { agentId: SKILLS_AGENT_IDS[other], dirParts: ['.agents', 'skills'], useLock: false, suffix: tools.includes('claude') ? ' (.agents)' : '' })));
   }
   return results;
 }
@@ -658,8 +675,9 @@ export async function main(argv, deps = {}) {
     const others = opts.tools.filter((t) => t !== 'claude').join(',');
     const ctx = { kitDir, projectDir: opts.projectDir, manifest, profile, run, opts, isTTY, log };
 
-    if (hasClaude && !opts.dryRun && (selected('skills') || selected('mcp'))) {
-      const lines = listSources(profile, manifest, new Set(['skills', 'mcp']).intersection(opts.only ?? new Set(['skills', 'mcp'])));
+    const needsConsent = new Set(['skills', ...(hasClaude ? ['mcp'] : [])]).intersection(opts.only ?? new Set(['skills', 'mcp']));
+    if (!opts.dryRun && needsConsent.size) {
+      const lines = listSources(profile, manifest, needsConsent);
       if (lines.length) {
         log('Third-party sources this run will install from:');
         for (const l of lines) log(`  ${l}`);
@@ -679,10 +697,7 @@ export async function main(argv, deps = {}) {
       if (others) later('agents');
     }
     if (selected('rules')) results.push(...(await installRules(ctx)));
-    if (selected('skills')) {
-      if (hasClaude) results.push(...(await installSkills(ctx)));
-      if (others) later('skills');
-    }
+    if (selected('skills')) results.push(...(await installSkills(ctx)));
     if (selected('mcp') && profile.mcp.length) {
       if (hasClaude) results.push(...(await installMcp(ctx)));
       if (others) later('mcp');
