@@ -83,6 +83,9 @@ function isEntryPoint() {
 }
 
 export const LAYERS = ['agents', 'rules', 'skills', 'mcp', 'plugins', 'hooks'];
+export const TOOLS = ['claude', 'codex', 'cursor', 'gemini', 'copilot'];
+
+const toolsOf = (ctx) => ctx.opts?.tools ?? ['claude'];
 
 export function parseArgs(argv) {
   const o = {
@@ -93,6 +96,7 @@ export function parseArgs(argv) {
     autoCheck: false,
     mergeRules: false,
     forceMcp: false,
+    tools: ['claude'],
     only: null,
     projectDir: process.cwd(),
   };
@@ -107,6 +111,12 @@ export function parseArgs(argv) {
     else if (a === '--auto-check') o.autoCheck = true;
     else if (a === '--merge-rules') o.mergeRules = true;
     else if (a === '--force-mcp') o.forceMcp = true;
+    else if (a === '--tool') {
+      const names = String(argv[++i] ?? '').split(',').map((n) => n.trim()).filter(Boolean);
+      if (!names.length) throw new Error(`--tool needs a name (${TOOLS.join(', ')}, or all)`);
+      for (const n of names) if (n !== 'all' && !TOOLS.includes(n)) throw new Error(`--tool: unknown tool ${n} (use ${TOOLS.join(', ')}, or all)`);
+      o.tools = names.includes('all') ? [...TOOLS] : TOOLS.filter((t) => names.includes(t));
+    }
     else if (a === '--only') {
       const names = String(argv[++i] ?? '').split(',').filter(Boolean);
       for (const n of names) if (!LAYERS.includes(n)) throw new Error(`--only: unknown layer ${n}`);
@@ -307,7 +317,9 @@ async function appendRules({ item, src, dest, dryRun, transform }) {
 
 export async function installRules(ctx) {
   const results = [];
-  for (const f of ['AGENTS.md', 'CLAUDE.md']) {
+  const tools = toolsOf(ctx);
+  const files = ['AGENTS.md', ...(tools.includes('claude') ? ['CLAUDE.md'] : []), ...(tools.includes('gemini') ? ['GEMINI.md'] : [])];
+  for (const f of files) {
     const transform =
       f === 'AGENTS.md' && !ctx.profile.names.includes('web') ? (t) => stripProfileBlock(t, 'web') : undefined;
     const src = path.join(ctx.kitDir, 'templates', f);
@@ -561,13 +573,13 @@ export async function installPlugins(ctx) {
 
 const NODE_FLOOR = [22, 20, 0];
 
-export function preflight(env) {
+export function preflight(env, tools = ['claude']) {
   const problems = [];
   const have = String(env.nodeVersion).split('.').map((n) => parseInt(n, 10) || 0);
   let cmp = 0;
   for (let i = 0; i < 3 && cmp === 0; i++) cmp = Math.sign((have[i] ?? 0) - NODE_FLOOR[i]);
   if (cmp < 0) problems.push(`node 22.20.0 or newer required (found ${env.nodeVersion})`);
-  for (const name of ['git', 'claude']) if (!env.resolve(name)) problems.push(`${name} not found on PATH`);
+  for (const name of ['git', ...(tools.includes('claude') ? ['claude'] : [])]) if (!env.resolve(name)) problems.push(`${name} not found on PATH`);
   return { ok: problems.length === 0, problems };
 }
 
@@ -592,7 +604,7 @@ export function listSources(profile, manifest, layers) {
   return lines;
 }
 
-export function formatSummary(results) {
+export function formatSummary(results, tools = ['claude']) {
   const out = [];
   for (const layer of LAYERS) {
     const rows = results.filter((r) => r.layer === layer);
@@ -602,13 +614,13 @@ export function formatSummary(results) {
   }
   const n = (s) => results.filter((r) => r.status === s).length;
   out.push('', `installed ${n('installed')}, skipped ${n('skipped')}, failed ${n('failed')}${n('dry-run') ? `, dry-run ${n('dry-run')}` : ''}`);
-  out.push(
-    '',
-    'Next steps:',
-    '  1. Restart Claude Code (plugins load on start).',
-    '  2. Run `claude` in this project and approve the project MCP servers when asked.',
-    '  3. Fill the TODO lines in AGENTS.md.',
-  );
+  const steps = [
+    ...(tools.includes('claude')
+      ? ['Restart Claude Code (plugins load on start).', 'Run `claude` in this project and approve the project MCP servers when asked.']
+      : []),
+    'Fill the TODO lines in AGENTS.md.',
+  ];
+  out.push('', 'Next steps:', ...steps.map((t, i) => `  ${i + 1}. ${t}`));
   return out.join('\n');
 }
 
@@ -633,7 +645,7 @@ export async function main(argv, deps = {}) {
     const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
     const ask = deps.ask ?? defaultAsk;
 
-    const pre = preflight(env);
+    const pre = preflight(env, opts.tools);
     if (!pre.ok) {
       for (const p of pre.problems) log(`error: ${p}`);
       return 1;
@@ -642,9 +654,11 @@ export async function main(argv, deps = {}) {
     const profile = resolveProfiles(manifest, opts.profiles);
     const run = deps.run ?? createRunner({ dryRun: opts.dryRun, log, spawnFn: deps.spawnFn, env: cmdEnv });
     const selected = (l) => !opts.only || opts.only.has(l);
+    const hasClaude = opts.tools.includes('claude');
+    const others = opts.tools.filter((t) => t !== 'claude').join(',');
     const ctx = { kitDir, projectDir: opts.projectDir, manifest, profile, run, opts, isTTY, log };
 
-    if (!opts.dryRun && (selected('skills') || selected('mcp'))) {
+    if (hasClaude && !opts.dryRun && (selected('skills') || selected('mcp'))) {
       const lines = listSources(profile, manifest, new Set(['skills', 'mcp']).intersection(opts.only ?? new Set(['skills', 'mcp'])));
       if (lines.length) {
         log('Third-party sources this run will install from:');
@@ -657,12 +671,28 @@ export async function main(argv, deps = {}) {
     }
 
     const results = [];
-    if (selected('agents')) results.push(...(await installAgents(ctx)));
+    // Layers that are written only for Claude Code for now; other tools get a visible "skipped" row.
+    const later = (layer) => results.push({ layer, item: others, status: 'skipped', detail: `not available for ${others} yet` });
+    const claudeOnly = (layer) => results.push({ layer, item: others, status: 'skipped', detail: 'Claude Code only' });
+    if (selected('agents')) {
+      if (hasClaude) results.push(...(await installAgents(ctx)));
+      if (others) later('agents');
+    }
     if (selected('rules')) results.push(...(await installRules(ctx)));
-    if (selected('skills')) results.push(...(await installSkills(ctx)));
-    if (selected('mcp')) results.push(...(await installMcp(ctx)));
-    if (opts.autoCheck || opts.only?.has('hooks')) results.push(...(await installAutoCheck(ctx)));
-    if (selected('plugins') && profile.plugins.length) {
+    if (selected('skills')) {
+      if (hasClaude) results.push(...(await installSkills(ctx)));
+      if (others) later('skills');
+    }
+    if (selected('mcp') && profile.mcp.length) {
+      if (hasClaude) results.push(...(await installMcp(ctx)));
+      if (others) later('mcp');
+    }
+    if (opts.autoCheck || opts.only?.has('hooks')) {
+      if (hasClaude) results.push(...(await installAutoCheck(ctx)));
+      else claudeOnly('hooks');
+    }
+    if (selected('plugins') && profile.plugins.length && !hasClaude) claudeOnly('plugins');
+    else if (selected('plugins') && profile.plugins.length) {
       if (opts.skipUser) {
         results.push(...profile.plugins.map((item) => ({ layer: 'plugins', item, status: 'skipped', detail: '--skip-user' })));
       } else {
@@ -676,7 +706,7 @@ export async function main(argv, deps = {}) {
         else results.push(...profile.plugins.map((item) => ({ layer: 'plugins', item, status: 'skipped', detail: 'declined' })));
       }
     }
-    log(formatSummary(results));
+    log(formatSummary(results, opts.tools));
     return results.some((r) => r.status === 'failed') ? 1 : 0;
   } catch (e) {
     log(`error: ${e.message}`);

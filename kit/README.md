@@ -23,6 +23,7 @@ From a clone, run `node path/to/kit/install.mjs` with the same flags.
 |---|---|
 | `--profile NAME[,NAME]` | `core` (default, always included): general software work. `web` adds the web agents, Chrome DevTools MCP, and the `ui-ux-pro-max` plugin. `superpowers` adds the `superpowers` plugin (its hook makes the agent check skills before every reply, which uses more context). Combine them, for example `--profile web,superpowers`, or use `all` for every profile |
 | `--dry-run` | Print every action, change nothing |
+| `--tool NAME[,NAME]` | Tools to set up: `claude` (default), `codex`, `cursor`, `gemini`, `copilot`, or `all`. In progress: for the non-Claude tools only the rules are written so far (`AGENTS.md`, plus `GEMINI.md` for Gemini). Agents, skills, and MCP servers for them come in later releases and show as `skipped` in the summary. The `claude` CLI is needed only when `claude` is selected |
 | `--yes` | Skip the confirmation prompts |
 | `--skip-user` | Do not install plugins (they change your whole machine, not just the project) |
 | `--only agents,rules,skills,mcp,plugins,hooks` | Run only these layers |
