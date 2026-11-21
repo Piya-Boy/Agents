@@ -66,8 +66,9 @@ The `web` profile adds `designer`, `web-dev`, and `frontend`, plus the Chrome De
 | `core` | The ten agents above, rules, skills, and the Context7 MCP server. Always included |
 | `web` | Web agents, Chrome DevTools MCP, `ui-ux-pro-max` plugin |
 | `superpowers` | The `superpowers` plugin (its hook makes the agent check skills before every reply, which uses more context) |
+| `all` | Every profile above at once. A profile added to `kit.json` later is included too |
 
-Combine them: `--profile web,superpowers`.
+Combine them: `--profile web,superpowers`. Or take everything: `--profile all`.
 
 ## Commands
 
@@ -81,20 +82,21 @@ Run all of these from your project root. Working from a clone? Replace `npx gith
 | Install the core profile | `npx github:Piya-Boy/Agents` |
 | Add the web agents, Chrome DevTools MCP, and `ui-ux-pro-max` | `npx github:Piya-Boy/Agents --profile web` |
 | Web plus the `superpowers` plugin | `npx github:Piya-Boy/Agents --profile web,superpowers` |
+| Every profile (core, web, superpowers) | `npx github:Piya-Boy/Agents --profile all` |
 | Project files only, no plugins on your machine | `npx github:Piya-Boy/Agents --skip-user` |
 | Skip the confirmation prompts (CI, or no terminal) | `npx github:Piya-Boy/Agents --yes` |
 | `AGENTS.md` already exists: add the kit rules at its end | `npx github:Piya-Boy/Agents --only rules --merge-rules` |
 | Write MCP servers to `.mcp.json` even if a plugin provides them | `npx github:Piya-Boy/Agents --only mcp --force-mcp` |
 | Add only the web MCP server (Chrome DevTools) | `npx github:Piya-Boy/Agents --only mcp --profile web --force-mcp` |
 | Get a reminder when installed skills have updates | `npx github:Piya-Boy/Agents --only hooks` (or add `--auto-check` to a full install) |
-| Everything, including the opt-in extras | `npx github:Piya-Boy/Agents --profile web,superpowers --merge-rules --force-mcp --auto-check` |
+| Everything, including the opt-in extras | `npx github:Piya-Boy/Agents --profile all --merge-rules --force-mcp --auto-check` |
 | Update installed skills later (after you review) | `npx skills update -p -y` |
 
 ### Flags
 
 | Flag | Meaning |
 |---|---|
-| `--profile NAME[,NAME]` | Profiles to install: `core` (default, always included), `web`, `superpowers` |
+| `--profile NAME[,NAME]` | Profiles to install: `core` (default, always included), `web`, `superpowers`, or `all` for every profile |
 | `--dry-run` | Print every action, change nothing |
 | `--yes` | Skip the confirmation prompts |
 | `--skip-user` | Do not install plugins (they change your whole machine, not just the project) |

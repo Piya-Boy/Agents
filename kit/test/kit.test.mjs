@@ -32,6 +32,20 @@ test('resolveProfiles combines profiles, core always first, no duplicates', asyn
   assert.throws(() => resolveProfiles(m, ['nope']), /unknown profile: nope/);
 });
 
+test('resolveProfiles: all means every profile in kit.json', async () => {
+  const m = await loadManifest(kitDir);
+  const all = resolveProfiles(m, ['all']);
+  assert.deepEqual(all.names, ['core', ...Object.keys(m.profiles).filter((n) => n !== 'core')]);
+  assert.deepEqual(all.names, ['core', 'web', 'superpowers']);
+  assert.deepEqual(all.agentDirs, ['agents/core', 'agents/web']);
+  assert.deepEqual(all.mcp, ['context7', 'chrome-devtools']);
+  assert.deepEqual(all.plugins, ['ui-ux-pro-max', 'superpowers']);
+  assert.deepEqual(resolveProfiles(m, ['all', 'web']).names, all.names);
+  assert.deepEqual(resolveProfiles(m, ['superpowers', 'all']).names, ['core', 'superpowers', 'web']);
+  const extra = { ...m, profiles: { ...m.profiles, extra: { skills: [] } } };
+  assert.deepEqual(resolveProfiles(extra, ['all']).names, ['core', 'web', 'superpowers', 'extra']);
+});
+
 test('resolveProfile web extends core', async () => {
   const m = await loadManifest(kitDir);
   const p = resolveProfile(m, 'web');
