@@ -5,8 +5,8 @@
     "core": {
       "agents": "agents/core",
       "skills": [
-        { "repo": "addyosmani/agent-skills", "skills": "*" },
-        { "repo": "mattpocock/skills", "skills": "*" },
+        { "repo": "addyosmani/agent-skills", "skills": ["accessibility-engineering", "api-and-interface-design", "browser-testing-with-devtools", "ci-cd-and-automation", "code-review-and-quality", "code-simplification", "debugging-and-error-recovery", "documentation-and-adrs", "doubt-driven-development", "frontend-ui-engineering", "git-workflow-and-versioning", "incremental-implementation", "observability-and-instrumentation", "performance-optimization", "planning-and-task-breakdown", "security-and-hardening", "shipping-and-launch", "source-driven-development", "spec-driven-development", "test-driven-development"] },
+        { "repo": "mattpocock/skills", "skills": ["codebase-design", "diagnosing-bugs", "handoff", "implement", "research"] },
         { "repo": "Piya-Boy/piya-skill", "skills": ["thai-natural-writing"] },
         { "repo": "GRJY/Claude-Code-skill", "skills": ["strategic-compact"] }
       ],
@@ -17,7 +17,7 @@
     "web": {
       "extends": "core",
       "agents": "agents/web",
-      "skills": [{ "repo": "GoogleChrome/modern-web-guidance", "skills": "*" }],
+      "skills": [{ "repo": "GoogleChrome/modern-web-guidance", "skills": ["modern-web-guidance"] }],
       "mcp": ["chrome-devtools"],
       "plugins": ["ui-ux-pro-max"]
     }

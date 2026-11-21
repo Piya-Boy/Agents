@@ -32,6 +32,8 @@ test('readMcpJson cases', async () => {
   assert.deepEqual(await readMcpJson(f), { mcpServers: { a: {} } });
   await fs.writeFile(f, '{"x":1}');
   assert.deepEqual(await readMcpJson(f), { x: 1, mcpServers: {} });
+  await fs.writeFile(f, '﻿{"mcpServers":{"b":{}}}');
+  assert.deepEqual(await readMcpJson(f), { mcpServers: { b: {} } });
   await fs.writeFile(f, '{not json');
   await assert.rejects(readMcpJson(f), /not valid JSON/);
 });

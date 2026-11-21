@@ -59,8 +59,8 @@ kit/
     "core": {
       "agents": "agents/core",
       "skills": [
-        { "repo": "addyosmani/agent-skills", "skills": "*" },
-        { "repo": "mattpocock/skills", "skills": "*" },
+        { "repo": "addyosmani/agent-skills", "skills": ["test-driven-development", "... 20 names, see kit.json"] },
+        { "repo": "mattpocock/skills", "skills": ["handoff", "... 5 names"] },
         { "repo": "Piya-Boy/piya-skill", "skills": ["thai-natural-writing"] },
         { "repo": "GRJY/Claude-Code-skill", "skills": ["strategic-compact"] }
       ],
@@ -71,7 +71,7 @@ kit/
     "web": {
       "extends": "core",
       "agents": "agents/web",
-      "skills": [{ "repo": "GoogleChrome/modern-web-guidance", "skills": "*" }],
+      "skills": [{ "repo": "GoogleChrome/modern-web-guidance", "skills": ["modern-web-guidance"] }],
       "mcp": ["chrome-devtools"],
       "plugins": ["ui-ux-pro-max"]
     }
@@ -85,7 +85,7 @@ kit/
   }
 }
 ```
-`extends` merges: agent dirs, skills, bundled skills, mcp, plugins are appended. `skills: "*"` means every skill in that repo.
+`extends` merges: agent dirs, skills, bundled skills, mcp, plugins are appended. Skills are listed by name; `"*"` is rejected because the skills CLI overwrites an existing skill of the same name (verified 2026-11-21 with `skills add ... --skill tdd -y` over a user-edited `.claude/skills/tdd`). The kit's lists come from the 26 skills in this repo's `skills-lock.json` plus `thai-natural-writing` and `strategic-compact`.
 
 ## Verified commands (researcher, from help output and official docs; nothing was run)
 - Skills add: `npx -y skills@PIN add REPO --agent claude-code --skill NAME -y` (`--skill '*'` for all; never `--all`). One call per skill name.

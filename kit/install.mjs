@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 // Agent kit installer. Node stdlib only. See docs/superpowers/specs/2026-11-21-installer-design.md
 import { spawn } from 'node:child_process';
-import { existsSync, constants as fsConstants } from 'node:fs';
+import { existsSync, realpathSync, constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+
+const stripBom = (t) => (t.charCodeAt(0) === 0xfeff ? t.slice(1) : t);
 
 export async function loadManifest(kitDir) {
   let text;
@@ -20,6 +22,13 @@ export async function loadManifest(kitDir) {
     throw new Error(`kit.json: invalid JSON (${e.message})`);
   }
   if (manifest.version !== 1) throw new Error('kit.json: unsupported version');
+  for (const [pname, def] of Object.entries(manifest.profiles || {})) {
+    for (const s of def.skills || []) {
+      if (!Array.isArray(s.skills) || !s.skills.length) {
+        throw new Error(`kit.json: skills for ${s.repo} in profile ${pname} must be a list of names (no "*": the skills CLI overwrites existing skills)`);
+      }
+    }
+  }
   return manifest;
 }
 
@@ -38,6 +47,15 @@ export function resolveProfile(manifest, name, seen = []) {
     mcp: [...base.mcp, ...(def.mcp || [])],
     plugins: [...base.plugins, ...(def.plugins || [])],
   };
+}
+
+function isEntryPoint() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
 }
 
 export const LAYERS = ['agents', 'rules', 'skills', 'mcp', 'plugins'];
@@ -68,6 +86,7 @@ export function parseArgs(argv) {
   return o;
 }
 
+const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const UNSAFE_CMD_ARG = /[&|^%"<>\r\n]/;
 
 export function assertSafeCmdArgs(args) {
@@ -115,31 +134,51 @@ export function createRunner({ dryRun, log, spawnFn = spawn, env = defaultEnv() 
     }
     const resolved = resolveCommand(cmd, env);
     if (!resolved) return { code: 127, stdout: '', stderr: `command not found: ${cmd}` };
-    try {
-      if (resolved.file === 'cmd.exe') assertSafeCmdArgs(args);
-    } catch (e) {
-      return { code: 1, stdout: '', stderr: e.message };
+    let spawnArgs = [...resolved.prefixArgs, ...args];
+    let verbatim = false;
+    if (resolved.file === 'cmd.exe') {
+      // One verbatim command line: with /s, cmd strips the outer quotes and keeps the rest as typed.
+      try {
+        const parts = [resolved.prefixArgs[3], ...args];
+        assertSafeCmdArgs(parts);
+        spawnArgs = ['/d', '/s', '/c', `"${parts.map((x) => `"${x}"`).join(' ')}"`];
+        verbatim = true;
+      } catch (e) {
+        return { code: 1, stdout: '', stderr: e.message };
+      }
     }
+    const timeoutMs = o.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     return new Promise((resolve) => {
       let out = '';
       let err = '';
       let done = false;
+      let timer;
       const finish = (r) => {
         if (!done) {
           done = true;
+          clearTimeout(timer);
           resolve(r);
         }
       };
       let child;
       try {
-        child = spawnFn(resolved.file, [...resolved.prefixArgs, ...args], {
+        child = spawnFn(resolved.file, spawnArgs, {
           cwd: o.cwd,
-          stdio: o.inherit ? 'inherit' : 'pipe',
+          stdio: o.inherit ? 'inherit' : ['ignore', 'pipe', 'pipe'],
           windowsHide: true,
           shell: false,
+          ...(verbatim ? { windowsVerbatimArguments: true } : {}),
         });
       } catch (e) {
         return finish({ code: 1, stdout: '', stderr: e.message });
+      }
+      if (!o.inherit) {
+        timer = setTimeout(() => {
+          try {
+            child.kill();
+          } catch {}
+          finish({ code: 124, stdout: out, stderr: `timed out after ${Math.round(timeoutMs / 1000)}s` });
+        }, timeoutMs);
       }
       child.stdout?.on('data', (d) => (out += d));
       child.stderr?.on('data', (d) => (err += d));
@@ -232,7 +271,7 @@ const lastLine = (s) => String(s || '').trim().split(/\r?\n/).filter(Boolean).po
 
 async function readLockSkills(projectDir, log) {
   try {
-    const lock = JSON.parse(await fs.readFile(path.join(projectDir, 'skills-lock.json'), 'utf8'));
+    const lock = JSON.parse(stripBom(await fs.readFile(path.join(projectDir, 'skills-lock.json'), 'utf8')));
     return lock.skills && typeof lock.skills === 'object' ? lock.skills : {};
   } catch (e) {
     if (e.code !== 'ENOENT') log(`warning: skills-lock.json unreadable (${e.message}); treating as empty`);
@@ -260,15 +299,6 @@ export async function installSkills(ctx) {
   };
 
   for (const { repo, skills } of ctx.profile.skills) {
-    if (skills === '*') {
-      const have = Object.values(lock).some((e) => e && e.source === repo);
-      results.push(
-        have
-          ? { layer: 'skills', item: `${repo} (all)`, status: 'skipped', detail: 'already in skills-lock.json' }
-          : await addSkill(repo, '*', `${repo} (all)`),
-      );
-      continue;
-    }
     for (const name of skills) {
       if (lock[name]?.source === repo || (await onDisk(name))) {
         results.push({ layer: 'skills', item: name, status: 'skipped', detail: 'already installed' });
@@ -305,6 +335,7 @@ export async function readMcpJson(file) {
     if (e.code === 'ENOENT') return { mcpServers: {} };
     throw e;
   }
+  text = stripBom(text);
   if (!text.trim()) return { mcpServers: {} };
   let obj;
   try {
@@ -504,7 +535,7 @@ export async function main(argv, deps = {}) {
       } else {
         let go = true;
         if (!opts.dryRun) {
-          log('Plugins install for the whole machine (user scope):');
+          log('Plugins install for the whole machine (user scope). Claude will add them to ~/.claude/settings.json (enabledPlugins, extraKnownMarketplaces):');
           for (const l of listSources(profile, manifest, new Set(['plugins']))) log(`  ${l}`);
           go = await confirm('Install plugins?', { yes: opts.yes, isTTY, ask });
         }
@@ -520,6 +551,6 @@ export async function main(argv, deps = {}) {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isEntryPoint()) {
   process.exit(await main(process.argv.slice(2)));
 }

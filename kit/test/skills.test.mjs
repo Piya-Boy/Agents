@@ -53,20 +53,6 @@ test('already in lock or on disk: skipped, no calls', async () => {
   assert.equal(res2[0].status, 'skipped');
 });
 
-test('star repo: one call with --skill *; skipped when lock has the repo', async () => {
-  const dir = await makeTempProject();
-  const f = fakeRunner();
-  await installSkills(ctx(dir, f.run, { skills: [{ repo: 'mattpocock/skills', skills: '*' }] }));
-  assert.equal(f.calls.length, 1);
-  assert.deepEqual(f.calls[0].args.slice(-3), ['--skill', '*', '-y']);
-  const dir2 = await makeTempProject();
-  await writeLock(dir2, { tdd: { source: 'mattpocock/skills' } });
-  const f2 = fakeRunner();
-  const res = await installSkills(ctx(dir2, f2.run, { skills: [{ repo: 'mattpocock/skills', skills: '*' }] }));
-  assert.equal(f2.calls.length, 0);
-  assert.equal(res[0].status, 'skipped');
-});
-
 test('windows copy fallback', async () => {
   const dir = await makeTempProject();
   let n = 0;
@@ -118,4 +104,13 @@ test('dry-run: dry-run results, no bundled copy', async () => {
   const res = await installSkills(ctx(dir, f.run, { skills: named, bundledSkills: ['software-engineer'], dryRun: true }));
   assert.deepEqual(res.map((r) => r.status), ['dry-run', 'dry-run']);
   await assert.rejects(fs.access(path.join(dir, '.claude')));
+});
+
+test('skills-lock.json with a BOM is still read', async () => {
+  const dir = await makeTempProject();
+  await fs.writeFile(path.join(dir, 'skills-lock.json'), '﻿' + JSON.stringify({ version: 2, skills: { 'thai-natural-writing': { source: 'Piya-Boy/piya-skill' } } }));
+  const f = fakeRunner();
+  const res = await installSkills(ctx(dir, f.run, { skills: named }));
+  assert.equal(f.calls.length, 0);
+  assert.equal(res[0].status, 'skipped');
 });

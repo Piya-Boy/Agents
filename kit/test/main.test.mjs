@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
+import { spawnSync } from 'node:child_process';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { installPlugins, preflight, confirm, listSources, formatSummary, main, loadManifest, resolveProfile } from '../install.mjs';
 import { makeTempProject, fakeRunner } from './helpers.mjs';
@@ -183,4 +185,21 @@ test('main --skip-user skips plugins without a second prompt', async () => {
   assert.equal(asked, 0);
   assert.ok(!f.calls.some((c) => c.args[1] === 'install'));
   assert.ok(logs.join('\n').includes('--skip-user'));
+});
+
+test('plugin consent says plugins edit ~/.claude/settings.json', async () => {
+  const dir = await makeTempProject();
+  const logs = [];
+  const f = fakeRunner((cmd, args) => (args[0] === 'plugin' && args[1] === 'list' ? { stdout: '[]' } : {}));
+  await main(['--profile', 'web', '--only', 'plugins', '--yes'], { projectDir: dir, env: okEnv, log: (l) => logs.push(l), isTTY: true, run: f.run });
+  assert.match(logs.join(String.fromCharCode(10)), /settings\.json/);
+});
+
+test('running through a symlink or junction still runs main', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'junc-'));
+  const link = path.join(root, 'kitlink');
+  await fs.symlink(kitDir, link, 'junction');
+  const r = spawnSync(process.execPath, [path.join(link, 'install.mjs'), '--bogus'], { encoding: 'utf8' });
+  assert.equal(r.status, 1);
+  assert.match(r.stdout + r.stderr, /unknown flag: --bogus/);
 });

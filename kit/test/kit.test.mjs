@@ -22,7 +22,7 @@ test('resolveProfile web extends core', async () => {
   assert.deepEqual(p.mcp, ['context7', 'chrome-devtools']);
   assert.deepEqual(p.plugins, ['ui-ux-pro-max']);
   const last = p.skills[p.skills.length - 1];
-  assert.deepEqual(last, { repo: 'GoogleChrome/modern-web-guidance', skills: '*' });
+  assert.deepEqual(last, { repo: 'GoogleChrome/modern-web-guidance', skills: ['modern-web-guidance'] });
   assert.equal(p.skills[0].repo, 'addyosmani/agent-skills');
 });
 
@@ -55,4 +55,12 @@ test('real kit is consistent', async () => {
   }
   const agents = await fs.readFile(path.join(kitDir, 'templates/AGENTS.md'), 'utf8');
   assert.ok(agents.includes('<!-- profile:web:start -->') && agents.includes('<!-- profile:web:end -->'));
+});
+
+test('kit.json lists explicit skill names, never "*"', async () => {
+  const m = await loadManifest(kitDir);
+  for (const def of Object.values(m.profiles)) for (const s of def.skills || []) assert.ok(Array.isArray(s.skills) && s.skills.length > 0, s.repo);
+  const dir = await fs.mkdtemp(path.join((await import('node:os')).tmpdir(), 'star-'));
+  await fs.writeFile(path.join(dir, 'kit.json'), JSON.stringify({ version: 1, profiles: { core: { skills: [{ repo: 'a/b', skills: '*' }] } } }));
+  await assert.rejects(loadManifest(dir), /must be a list/);
 });

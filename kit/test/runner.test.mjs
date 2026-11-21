@@ -142,3 +142,58 @@ test('runner rejects unsafe args when going through cmd.exe', async () => {
   assert.match(r.stderr, /unsafe argument/);
   assert.equal(s.calls.length, 0);
 });
+
+test('cmd.exe shim: one verbatim command line, path with spaces', async () => {
+  const s = fakeSpawn();
+  const env = win((p) => p === 'C:\\bin dir\\claude.cmd', { pathEnv: 'C:\\bin dir' });
+  const run = createRunner({ dryRun: false, log() {}, spawnFn: s.fn, env });
+  await run('claude', ['plugin', 'list', 'a b']);
+  const c = s.calls[0];
+  assert.equal(c.file, 'cmd.exe');
+  assert.deepEqual(c.args, ['/d', '/s', '/c', '""C:\\bin dir\\claude.cmd" "plugin" "list" "a b""']);
+  assert.equal(c.opts.windowsVerbatimArguments, true);
+});
+
+test('cmd.exe shim in a path with & is rejected', async () => {
+  const s = fakeSpawn();
+  const env = win((p) => p === 'C:\\R&D\\claude.cmd', { pathEnv: 'C:\\R&D' });
+  const run = createRunner({ dryRun: false, log() {}, spawnFn: s.fn, env });
+  const r = await run('claude', ['x']);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /unsafe argument/);
+  assert.equal(s.calls.length, 0);
+});
+
+test('runner closes stdin and times out hung children', async () => {
+  let killed = false;
+  const calls = [];
+  const hung = (file, args, opts) => {
+    calls.push(opts);
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.kill = () => { killed = true; setImmediate(() => child.emit('close', null)); };
+    return child;
+  };
+  const run = createRunner({ dryRun: false, log() {}, spawnFn: hung, env: posixEnv(['claude']) });
+  const r = await run('claude', ['plugin', 'marketplace', 'add', 'x'], { timeoutMs: 30 });
+  assert.deepEqual(calls[0].stdio, ['ignore', 'pipe', 'pipe']);
+  assert.equal(r.code, 124);
+  assert.match(r.stderr, /timed out/);
+  assert.equal(killed, true);
+});
+
+test('real .cmd shim in a directory with spaces works on windows', { skip: process.platform !== 'win32' }, async () => {
+  const fsp = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'shim-'));
+  const dir = path.join(root, 'bin dir');
+  await fsp.mkdir(dir);
+  await fsp.writeFile(path.join(dir, 'claude.cmd'), ['@echo off', 'echo got %1 %2', ''].join(String.fromCharCode(13, 10)));
+  const env = { ...(await import('../install.mjs')).defaultEnv(), pathEnv: dir };
+  const run = createRunner({ dryRun: false, log() {}, env });
+  const r = await run('claude', ['plugin', 'list']);
+  assert.equal(r.code, 0);
+  assert.match(r.stdout, /got "?plugin"? "?list"?/);
+});

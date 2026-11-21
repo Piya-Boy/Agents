@@ -31,16 +31,16 @@ The script asks once before installing from third-party sources and lists each o
 |---|---|---|
 | Agents | `.claude/agents/` | `kit/agents/core` (+ `kit/agents/web`) |
 | Rules | `AGENTS.md`, `CLAUDE.md` | `kit/templates/` (the web section is removed for `core`) |
-| Skills | `.claude/skills/`, `skills-lock.json` | repos listed in `kit/kit.json`, plus `software-engineer` bundled in `kit/skills/` |
+| Skills | `.claude/skills/`, `skills-lock.json` | named skills from repos listed in `kit/kit.json`, plus `software-engineer` bundled in `kit/skills/` |
 | MCP servers | `.mcp.json` | `claude mcp add --scope project` |
 | Plugins | your user profile | `claude plugin install --scope user` |
 
-What to install is data in `kit/kit.json`. To add a skill repo, MCP server, or plugin, edit that file.
+What to install is data in `kit/kit.json`. To add a skill, MCP server, or plugin, edit that file. List skills by name: the skills CLI overwrites an existing skill of the same name, so the kit checks each name first and does not support `"*"`.
 
 ## Safe to re-run
 The script skips what already exists and never overwrites your `AGENTS.md`, `CLAUDE.md`, agents, skills, or `.mcp.json` entries. If `AGENTS.md` already exists, merge the kit's rules by hand. An MCP server that an installed plugin already provides (for example `context7`) is skipped.
 
-It never edits `~/.claude/settings.json` or `~/.claude/CLAUDE.md` and installs no hooks.
+The script itself never writes to `~/.claude/` and installs no hooks. The one exception is the plugin layer: `claude plugin install --scope user` makes Claude add the plugin to `~/.claude/settings.json` (`enabledPlugins`, `extraKnownMarketplaces`). Use `--skip-user` to avoid that.
 
 ## After installing
 1. Restart Claude Code so plugins load.
