@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "skillsCli": "skills@1.9.0",
+  "profiles": {
+    "core": {
+      "agents": "agents/core",
+      "skills": [
+        { "repo": "addyosmani/agent-skills", "skills": "*" },
+        { "repo": "mattpocock/skills", "skills": "*" },
+        { "repo": "Piya-Boy/piya-skill", "skills": ["thai-natural-writing"] },
+        { "repo": "GRJY/Claude-Code-skill", "skills": ["strategic-compact"] }
+      ],
+      "bundledSkills": ["software-engineer"],
+      "mcp": ["context7"],
+      "plugins": []
+    },
+    "web": {
+      "extends": "core",
+      "agents": "agents/web",
+      "skills": [{ "repo": "GoogleChrome/modern-web-guidance", "skills": "*" }],
+      "mcp": ["chrome-devtools"],
+      "plugins": ["ui-ux-pro-max"]
+    }
+  },
+  "mcp": {
+    "context7": { "command": "npx", "args": ["-y", "@upstash/context7-mcp"], "coveredByPlugin": "context7@" },
+    "chrome-devtools": { "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest"], "coveredByPlugin": "chrome-devtools-mcp@" }
+  },
+  "plugins": {
+    "ui-ux-pro-max": { "marketplace": "nextlevelbuilder/ui-ux-pro-max-skill", "id": "ui-ux-pro-max@ui-ux-pro-max-skill" }
+  }
+}

@@ -1,0 +1,58 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadManifest, resolveProfile } from '../install.mjs';
+
+const kitDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+test('resolveProfile core', async () => {
+  const m = await loadManifest(kitDir);
+  const p = resolveProfile(m, 'core');
+  assert.deepEqual(p.agentDirs, ['agents/core']);
+  assert.deepEqual(p.mcp, ['context7']);
+  assert.deepEqual(p.plugins, []);
+});
+
+test('resolveProfile web extends core', async () => {
+  const m = await loadManifest(kitDir);
+  const p = resolveProfile(m, 'web');
+  assert.deepEqual(p.agentDirs, ['agents/core', 'agents/web']);
+  assert.deepEqual(p.mcp, ['context7', 'chrome-devtools']);
+  assert.deepEqual(p.plugins, ['ui-ux-pro-max']);
+  const last = p.skills[p.skills.length - 1];
+  assert.deepEqual(last, { repo: 'GoogleChrome/modern-web-guidance', skills: '*' });
+  assert.equal(p.skills[0].repo, 'addyosmani/agent-skills');
+});
+
+test('resolveProfile errors', () => {
+  assert.throws(() => resolveProfile({ profiles: {} }, 'nope'), /unknown profile: nope/);
+  const cyc = { profiles: { a: { extends: 'b' }, b: { extends: 'a' } } };
+  assert.throws(() => resolveProfile(cyc, 'a'), /cycle/);
+});
+
+test('loadManifest rejects without kit.json', async () => {
+  const empty = await fs.mkdtemp(path.join((await import('node:os')).tmpdir(), 'nokit-'));
+  await assert.rejects(loadManifest(empty), /kit\.json/);
+});
+
+test('real kit is consistent', async () => {
+  const m = await loadManifest(kitDir);
+  const core = await fs.readdir(path.join(kitDir, 'agents/core'));
+  const web = await fs.readdir(path.join(kitDir, 'agents/web'));
+  assert.equal(core.filter((f) => f.endsWith('.md')).length, 10);
+  assert.equal(web.filter((f) => f.endsWith('.md')).length, 3);
+  for (const f of core.map((f) => 'agents/core/' + f).concat(web.map((f) => 'agents/web/' + f))) {
+    const text = await fs.readFile(path.join(kitDir, f), 'utf8');
+    assert.ok(text.startsWith('---'), `${f} frontmatter`);
+  }
+  for (const name of ['core', 'web']) {
+    const p = resolveProfile(m, name);
+    for (const s of p.bundledSkills) await fs.access(path.join(kitDir, 'skills', s, 'SKILL.md'));
+    for (const s of p.mcp) assert.ok(m.mcp[s], `mcp ${s}`);
+    for (const s of p.plugins) assert.ok(m.plugins[s], `plugin ${s}`);
+  }
+  const agents = await fs.readFile(path.join(kitDir, 'templates/AGENTS.md'), 'utf8');
+  assert.ok(agents.includes('<!-- profile:web:start -->') && agents.includes('<!-- profile:web:end -->'));
+});
