@@ -5,6 +5,7 @@
 //   cursor   .cursor/mcp.json       JSON, top-level "mcpServers"
 //   gemini   .gemini/settings.json  JSON settings file; servers go under "mcpServers"
 //   codex    .codex/config.toml     TOML, one [mcp_servers.<name>] table per server
+//   antigravity  .agents/mcp_config.json  JSON, top-level "mcpServers" (Gemini CLI's settings.json is not read)
 //
 // Claude Code is handled by `claude mcp add` in install.mjs. Nothing here overwrites an entry
 // that already exists, and a file that cannot be parsed is left untouched.
@@ -17,6 +18,7 @@ export const MCP_FILES = {
   cursor: '.cursor/mcp.json',
   gemini: '.gemini/settings.json',
   codex: '.codex/config.toml',
+  antigravity: '.agents/mcp_config.json',
 };
 
 const stripBom = (t) => (t.charCodeAt(0) === 0xfeff ? t.slice(1) : t);

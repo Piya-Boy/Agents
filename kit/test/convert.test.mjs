@@ -136,7 +136,7 @@ test('every real kit agent converts for every tool', async () => {
     for (const f of (await fs.readdir(path.join(kitDir, dir))).filter((x) => x.endsWith('.md'))) {
       const agent = parseAgent(await fs.readFile(path.join(kitDir, dir, f), 'utf8'));
       assert.equal(`${agent.name}.md`, f, 'file name matches the agent name');
-      for (const tool of ['codex', 'cursor', 'gemini', 'copilot']) {
+      for (const tool of ['codex', 'cursor', 'gemini', 'copilot', 'antigravity']) {
         const out = convertAgent(tool, agent);
         assert.ok(out.content.includes(agent.body.trim().split('\n')[0]), `${tool}:${f} keeps the body`);
         assert.match(path.basename(out.path), /^[a-z0-9-]+\.(toml|md|agent\.md)$/);
@@ -209,4 +209,29 @@ test('main --tool all --only agents: every tool gets its agents without the clau
   });
   assert.equal(code, 0);
   for (const p of ['.codex/agents/qa.toml', '.gemini/agents/qa.md', '.github/agents/qa.agent.md']) assert.equal(await exists(path.join(dir, p)), true, p);
+});
+
+test('antigravity: tools use its own names, are never empty, and keep read-only agents read-only', async () => {
+  const { antigravityTools } = await import('../convert.mjs');
+  assert.deepEqual(antigravityTools(parseAgent(readOnlyAgent)), ['view_file', 'grep_search']);
+  assert.deepEqual(antigravityTools(parseAgent(researcherAgent)), ['view_file', 'grep_search']);
+  assert.deepEqual(antigravityTools(parseAgent(builderAgent)), ['view_file', 'grep_search', 'run_command', 'replace_file_content']);
+  assert.deepEqual(antigravityTools({ tools: ['Read', 'Bash', 'Skill'] }), ['view_file', 'run_command']);
+  assert.deepEqual(antigravityTools({ tools: ['Skill'] }), ['view_file', 'grep_search'], 'read-only agent with nothing mappable still gets read tools');
+  assert.deepEqual(antigravityTools({ tools: ['Skill', 'Edit'] }), ['replace_file_content']);
+  const ro = convertAgent('antigravity', parseAgent(readOnlyAgent));
+  assert.equal(ro.path, '.agents/agents/architect.md');
+  assert.match(ro.content, /^---\nname: architect\ndescription: "Designs \\"systems\\": the big picture\."\nmodel: inherit\ntools: \["view_file", "grep_search"\]\n---\n\nThis agent is read-only\./);
+  const dev = convertAgent('antigravity', parseAgent(builderAgent));
+  assert.match(dev.content, /tools: \["view_file", "grep_search", "run_command", "replace_file_content"\]/);
+  assert.ok(!dev.content.includes('read-only'));
+});
+
+test('installAgents: antigravity writes 10 files under .agents/agents and nothing else', async () => {
+  const dir = await makeTempProject();
+  const res = await installAgents(await agentsCtx(dir, ['antigravity']));
+  assert.equal(res.length, 10);
+  assert.ok(res.every((r) => r.status === 'installed' && r.item.startsWith('.agents/agents/')));
+  assert.deepEqual((await fs.readdir(dir)).sort(), ['.agents']);
+  assert.deepEqual(await fs.readdir(path.join(dir, '.agents')), ['agents']);
 });

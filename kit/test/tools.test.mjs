@@ -220,3 +220,32 @@ test('main --tool codex: skills run, and the third-party prompt appears without 
   assert.equal(code2, 0);
   assert.ok(f.calls.length > 0 && f.calls.every((c) => c.args.includes('codex')));
 });
+
+test('antigravity: agy alias, tool order, rules, skills id', async () => {
+  assert.deepEqual(parseArgs(['--tool', 'agy']).tools, ['antigravity']);
+  assert.deepEqual(parseArgs(['--tool', 'agy,antigravity,codex']).tools, ['codex', 'antigravity']);
+  assert.ok(TOOLS.includes('antigravity'));
+  assert.throws(() => parseArgs(['--tool', 'agyy']), /unknown tool agyy/);
+  const dir = await makeTempProject();
+  const rules = await installRules(await ctxFor(dir, ['antigravity']));
+  assert.deepEqual(rules.map((r) => r.item), ['AGENTS.md'], 'Antigravity reads AGENTS.md itself');
+  const f = fakeRunner();
+  await installSkills(skillsCtx(await makeTempProject(), f.run, ['antigravity']));
+  assert.deepEqual(f.calls[0].args.slice(3, 6), ['Piya-Boy/piya-skill', '--agent', 'antigravity-cli']);
+});
+
+test('main --tool agy: no claude CLI, agents, skills, and MCP for Antigravity only', async () => {
+  const dir = await makeTempProject();
+  const f = fakeRunner();
+  const code = await main(['--tool', 'agy', '--only', 'agents,rules,mcp', '--yes'], { projectDir: dir, env: noClaudeEnv, log() {}, isTTY: false, run: f.run });
+  assert.equal(code, 0);
+  assert.equal(f.calls.length, 0);
+  for (const p of ['AGENTS.md', '.agents/agents/qa.md', '.agents/mcp_config.json']) assert.equal(await exists(path.join(dir, p)), true, p);
+  assert.equal(await exists(path.join(dir, '.claude')), false);
+});
+
+test('formatSummary mentions the Antigravity MCP approval, only for Antigravity', () => {
+  const rows = [{ layer: 'rules', item: 'AGENTS.md', status: 'installed' }];
+  assert.match(formatSummary(rows, ['antigravity']), /1\. Antigravity asks before each MCP tool call/);
+  assert.ok(!/Antigravity/.test(formatSummary(rows, ['codex'])));
+});

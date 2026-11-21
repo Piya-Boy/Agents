@@ -85,7 +85,8 @@ function isEntryPoint() {
 }
 
 export const LAYERS = ['agents', 'rules', 'skills', 'mcp', 'plugins', 'hooks'];
-export const TOOLS = ['claude', 'codex', 'cursor', 'gemini', 'copilot'];
+export const TOOLS = ['claude', 'codex', 'cursor', 'gemini', 'copilot', 'antigravity'];
+const TOOL_ALIASES = { agy: 'antigravity' };
 
 const toolsOf = (ctx) => ctx.opts?.tools ?? ['claude'];
 
@@ -114,9 +115,9 @@ export function parseArgs(argv) {
     else if (a === '--merge-rules') o.mergeRules = true;
     else if (a === '--force-mcp') o.forceMcp = true;
     else if (a === '--tool') {
-      const names = String(argv[++i] ?? '').split(',').map((n) => n.trim()).filter(Boolean);
+      const names = String(argv[++i] ?? '').split(',').map((n) => n.trim()).filter(Boolean).map((n) => TOOL_ALIASES[n] ?? n);
       if (!names.length) throw new Error(`--tool needs a name (${TOOLS.join(', ')}, or all)`);
-      for (const n of names) if (n !== 'all' && !TOOLS.includes(n)) throw new Error(`--tool: unknown tool ${n} (use ${TOOLS.join(', ')}, or all)`);
+      for (const n of names) if (n !== 'all' && !TOOLS.includes(n)) throw new Error(`--tool: unknown tool ${n} (use ${TOOLS.join(', ')}, agy, or all)`);
       o.tools = names.includes('all') ? [...TOOLS] : TOOLS.filter((t) => names.includes(t));
     }
     else if (a === '--only') {
@@ -452,7 +453,7 @@ async function installSkillsInto(ctx, { agentId, dirParts, useLock, suffix }) {
 }
 
 // Skills CLI agent ids. The CLI writes `.agents/skills/`, which Codex, Cursor, Gemini CLI, and Copilot all read.
-const SKILLS_AGENT_IDS = { codex: 'codex', cursor: 'cursor', gemini: 'gemini-cli', copilot: 'github-copilot' };
+const SKILLS_AGENT_IDS = { codex: 'codex', cursor: 'cursor', gemini: 'gemini-cli', copilot: 'github-copilot', antigravity: 'antigravity-cli' };
 
 export async function installSkills(ctx) {
   const tools = toolsOf(ctx);
@@ -694,6 +695,7 @@ export function formatSummary(results, tools = ['claude']) {
       : []),
     ...(tools.includes('codex') ? ['Codex reads `.codex/config.toml` (MCP servers) only in a project you have marked as trusted.'] : []),
     ...(tools.includes('gemini') ? ['Gemini CLI reads `.gemini/settings.json` (MCP servers) only in a trusted folder.'] : []),
+    ...(tools.includes('antigravity') ? ['Antigravity asks before each MCP tool call until you allow the server (rule `mcp(<server>/*)`).'] : []),
     'Fill the TODO lines in AGENTS.md.',
   ];
   out.push('', 'Next steps:', ...steps.map((t, i) => `  ${i + 1}. ${t}`));

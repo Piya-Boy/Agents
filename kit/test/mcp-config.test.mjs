@@ -20,6 +20,7 @@ test('file paths per tool', () => {
     cursor: '.cursor/mcp.json',
     gemini: '.gemini/settings.json',
     codex: '.codex/config.toml',
+    antigravity: '.agents/mcp_config.json',
   });
 });
 
@@ -166,4 +167,12 @@ test('installMcp: default tools unchanged (no extra files)', async () => {
   assert.ok(f.calls.some((c) => c.args[0] === 'mcp'));
   assert.equal(await exists(path.join(dir, '.cursor')), false);
   assert.equal(await exists(path.join(dir, '.codex')), false);
+});
+
+test('antigravity: .agents/mcp_config.json with command and args', async () => {
+  const dir = await makeTempProject();
+  const rows = await writeMcpServers({ tool: 'antigravity', projectDir: dir, servers: [c7], dryRun: false });
+  assert.equal(rows[0].status, 'installed');
+  assert.deepEqual(JSON.parse(await read(dir, '.agents/mcp_config.json')).mcpServers.context7, { command: 'npx', args: ['-y', '@upstash/context7-mcp'] });
+  assert.equal(await exists(path.join(dir, '.gemini')), false, 'Gemini CLI settings are not touched');
 });
