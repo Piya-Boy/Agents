@@ -89,6 +89,7 @@ export function parseArgs(argv) {
     yes: false,
     skipUser: false,
     autoCheck: false,
+    mergeRules: false,
     only: null,
     projectDir: process.cwd(),
   };
@@ -101,6 +102,7 @@ export function parseArgs(argv) {
     else if (a === '--yes') o.yes = true;
     else if (a === '--skip-user') o.skipUser = true;
     else if (a === '--auto-check') o.autoCheck = true;
+    else if (a === '--merge-rules') o.mergeRules = true;
     else if (a === '--only') {
       const names = String(argv[++i] ?? '').split(',').filter(Boolean);
       for (const n of names) if (!LAYERS.includes(n)) throw new Error(`--only: unknown layer ${n}`);
@@ -270,21 +272,58 @@ export async function installAgents(ctx) {
   return results;
 }
 
+export const RULES_START = '<!-- agent-kit:start -->';
+export const RULES_END = '<!-- agent-kit:end -->';
+
+// Opt-in (--merge-rules): add the kit rules to the end of an existing AGENTS.md inside markers.
+// Never edits existing text, and does nothing if the markers are already there.
+async function appendRules({ item, src, dest, dryRun, transform }) {
+  let existing;
+  try {
+    existing = await fs.readFile(dest, 'utf8');
+  } catch (e) {
+    return { layer: 'rules', item, status: 'failed', detail: e.message };
+  }
+  if (existing.includes(RULES_START)) return { layer: 'rules', item, status: 'skipped', detail: 'kit rules already added' };
+  if (dryRun) return { layer: 'rules', item, status: 'dry-run', detail: 'would add the kit rules at the end' };
+  try {
+    let body = (await fs.readFile(src, 'utf8')).replace(/\r\n/g, '\n');
+    if (transform) body = transform(body);
+    // Drop the template title and its "copy this file" intro; keep everything from the first "## " heading.
+    body = body.replace(/^# [^\n]*\n[\s\S]*?(?=^## )/m, '').trimEnd();
+    const crlf = existing.includes('\r\n');
+    const lead = existing.length === 0 || /\n\r?\n$/.test(existing) ? '' : existing.endsWith('\n') ? '\n' : '\n\n';
+    const block = `${lead}${RULES_START}\n${body}\n${RULES_END}\n`;
+    await fs.appendFile(dest, crlf ? block.replace(/\n/g, '\r\n') : block);
+    return { layer: 'rules', item, status: 'installed', detail: 'kit rules added at the end of the existing file' };
+  } catch (e) {
+    return { layer: 'rules', item, status: 'failed', detail: e.message };
+  }
+}
+
 export async function installRules(ctx) {
   const results = [];
-  const mergeNote = 'exists, left untouched: merge the kit rules by hand';
   for (const f of ['AGENTS.md', 'CLAUDE.md']) {
     const transform =
       f === 'AGENTS.md' && !ctx.profile.names.includes('web') ? (t) => stripProfileBlock(t, 'web') : undefined;
+    const src = path.join(ctx.kitDir, 'templates', f);
+    const dest = path.join(ctx.projectDir, f);
+    if (f === 'AGENTS.md' && ctx.opts.mergeRules && (await pathExists(dest))) {
+      results.push(await appendRules({ item: f, src, dest, dryRun: ctx.opts.dryRun, transform }));
+      continue;
+    }
     results.push(
       await copyNew({
         layer: 'rules',
         item: f,
-        src: path.join(ctx.kitDir, 'templates', f),
-        dest: path.join(ctx.projectDir, f),
+        src,
+        dest,
         dryRun: ctx.opts.dryRun,
         transform,
-        existsDetail: mergeNote,
+        existsDetail:
+          f === 'AGENTS.md'
+            ? 'exists, left untouched: merge the kit rules by hand, or re-run with --merge-rules'
+            : 'exists, left untouched: merge the kit rules by hand',
       }),
     );
   }
