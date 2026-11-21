@@ -297,6 +297,72 @@ export async function installSkills(ctx) {
   return results;
 }
 
+export async function readMcpJson(file) {
+  let text;
+  try {
+    text = await fs.readFile(file, 'utf8');
+  } catch (e) {
+    if (e.code === 'ENOENT') return { mcpServers: {} };
+    throw e;
+  }
+  if (!text.trim()) return { mcpServers: {} };
+  let obj;
+  try {
+    obj = JSON.parse(text);
+  } catch {
+    throw new Error('.mcp.json is not valid JSON');
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('.mcp.json is not valid JSON');
+  return { ...obj, mcpServers: obj.mcpServers && typeof obj.mcpServers === 'object' ? obj.mcpServers : {} };
+}
+
+export async function listInstalledPluginIds(run, cwd) {
+  const r = await run('claude', ['plugin', 'list', '--json'], { cwd, readOnly: true });
+  if (r.code !== 0) return [];
+  try {
+    const arr = JSON.parse(r.stdout);
+    return Array.isArray(arr) ? arr.map((p) => p && p.id).filter((id) => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function installMcp(ctx) {
+  const names = ctx.profile.mcp;
+  if (!names.length) return [];
+  let servers;
+  try {
+    servers = (await readMcpJson(path.join(ctx.projectDir, '.mcp.json'))).mcpServers;
+  } catch (e) {
+    return names.map((item) => ({ layer: 'mcp', item, status: 'failed', detail: e.message }));
+  }
+  const pluginIds = await listInstalledPluginIds(ctx.run, ctx.projectDir);
+  const results = [];
+  for (const item of names) {
+    const def = ctx.manifest.mcp[item];
+    if (item in servers) {
+      results.push({ layer: 'mcp', item, status: 'skipped', detail: 'already in .mcp.json' });
+      continue;
+    }
+    const covering = def.coveredByPlugin && pluginIds.find((id) => id.startsWith(def.coveredByPlugin));
+    if (covering) {
+      results.push({ layer: 'mcp', item, status: 'skipped', detail: `covered by plugin ${covering}` });
+      continue;
+    }
+    const r = await ctx.run(
+      'claude',
+      ['mcp', 'add', '--scope', 'project', '--transport', 'stdio', item, '--', def.command, ...def.args],
+      { cwd: ctx.projectDir },
+    );
+    results.push(
+      r.code === 0
+        ? { layer: 'mcp', item, status: ctx.opts.dryRun ? 'dry-run' : 'installed' }
+        : { layer: 'mcp', item, status: 'failed', detail: lastLine(r.stderr) },
+    );
+  }
+  return results;
+}
+
 export async function main() {
   return 0;
 }
