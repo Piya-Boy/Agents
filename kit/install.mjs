@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export async function loadManifest(kitDir) {
   let text;
@@ -363,8 +363,161 @@ export async function installMcp(ctx) {
   return results;
 }
 
-export async function main() {
-  return 0;
+export async function installPlugins(ctx) {
+  const names = ctx.profile.plugins;
+  if (!names.length) return [];
+  const dryRun = ctx.opts.dryRun;
+  const isTTY = ctx.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const installed = await listInstalledPluginIds(ctx.run, ctx.projectDir);
+  const results = [];
+  for (const item of names) {
+    const def = ctx.manifest.plugins[item];
+    if (installed.includes(def.id)) {
+      results.push({ layer: 'plugins', item, status: 'skipped', detail: 'already installed' });
+      continue;
+    }
+    if (!isTTY && !dryRun) {
+      results.push({ layer: 'plugins', item, status: 'failed', detail: 'needs a terminal for approval; run again in a terminal' });
+      continue;
+    }
+    const add = await ctx.run('claude', ['plugin', 'marketplace', 'add', def.marketplace, '--scope', 'user'], { cwd: ctx.projectDir });
+    if (add.code !== 0) {
+      results.push({ layer: 'plugins', item, status: 'failed', detail: `marketplace: ${lastLine(add.stderr)}` });
+      continue;
+    }
+    // No -y: Claude shows its own approval prompt for marketplace commands.
+    const inst = await ctx.run('claude', ['plugin', 'install', def.id, '--scope', 'user'], { cwd: ctx.projectDir, inherit: true });
+    results.push(
+      inst.code === 0
+        ? { layer: 'plugins', item, status: dryRun ? 'dry-run' : 'installed' }
+        : { layer: 'plugins', item, status: 'failed', detail: lastLine(inst.stderr) || `exit ${inst.code}` },
+    );
+  }
+  return results;
+}
+
+const NODE_FLOOR = [22, 20, 0];
+
+export function preflight(env) {
+  const problems = [];
+  const have = String(env.nodeVersion).split('.').map((n) => parseInt(n, 10) || 0);
+  let cmp = 0;
+  for (let i = 0; i < 3 && cmp === 0; i++) cmp = Math.sign((have[i] ?? 0) - NODE_FLOOR[i]);
+  if (cmp < 0) problems.push(`node 22.20.0 or newer required (found ${env.nodeVersion})`);
+  for (const name of ['git', 'claude']) if (!env.resolve(name)) problems.push(`${name} not found on PATH`);
+  return { ok: problems.length === 0, problems };
+}
+
+export async function confirm(question, { yes, isTTY, ask }) {
+  if (yes) return true;
+  if (!isTTY) throw new Error('non-interactive: pass --yes to continue');
+  const answer = String(await ask(`${question} [y/N] `)).trim().toLowerCase();
+  return answer === 'y' || answer === 'yes';
+}
+
+export function listSources(profile, manifest, layers) {
+  const want = (l) => !layers || layers.has(l);
+  const lines = [];
+  if (want('skills')) for (const s of profile.skills) lines.push(`skills: ${s.repo}`);
+  if (want('mcp')) {
+    for (const n of profile.mcp) {
+      const d = manifest.mcp[n];
+      lines.push(`mcp: ${[d.command, ...d.args.filter((a) => a !== '-y')].join(' ')}`);
+    }
+  }
+  if (want('plugins')) for (const n of profile.plugins) lines.push(`plugin: ${manifest.plugins[n].marketplace}`);
+  return lines;
+}
+
+export function formatSummary(results) {
+  const out = [];
+  for (const layer of LAYERS) {
+    const rows = results.filter((r) => r.layer === layer);
+    if (!rows.length) continue;
+    out.push(`[${layer}]`);
+    for (const r of rows) out.push(`  ${r.status.padEnd(9)} ${r.item}${r.detail ? ` (${r.detail})` : ''}`);
+  }
+  const n = (s) => results.filter((r) => r.status === s).length;
+  out.push('', `installed ${n('installed')}, skipped ${n('skipped')}, failed ${n('failed')}${n('dry-run') ? `, dry-run ${n('dry-run')}` : ''}`);
+  out.push(
+    '',
+    'Next steps:',
+    '  1. Restart Claude Code (plugins load on start).',
+    '  2. Run `claude` in this project and approve the project MCP servers when asked.',
+    '  3. Fill the TODO lines in AGENTS.md.',
+  );
+  return out.join('\n');
+}
+
+async function defaultAsk(question) {
+  const { createInterface } = await import('node:readline/promises');
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return await rl.question(question);
+  } finally {
+    rl.close();
+  }
+}
+
+export async function main(argv, deps = {}) {
+  const log = deps.log ?? ((l) => console.log(l));
+  try {
+    const opts = parseArgs(argv);
+    if (deps.projectDir) opts.projectDir = deps.projectDir;
+    const kitDir = deps.kitDir ?? path.dirname(fileURLToPath(import.meta.url));
+    const cmdEnv = deps.cmdEnv ?? defaultEnv();
+    const env = deps.env ?? { nodeVersion: process.versions.node, resolve: (n) => resolveCommand(n, cmdEnv) };
+    const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+    const ask = deps.ask ?? defaultAsk;
+
+    const pre = preflight(env);
+    if (!pre.ok) {
+      for (const p of pre.problems) log(`error: ${p}`);
+      return 1;
+    }
+    const manifest = await loadManifest(kitDir);
+    const profile = resolveProfile(manifest, opts.profile);
+    const run = deps.run ?? createRunner({ dryRun: opts.dryRun, log, spawnFn: deps.spawnFn, env: cmdEnv });
+    const selected = (l) => !opts.only || opts.only.has(l);
+    const ctx = { kitDir, projectDir: opts.projectDir, manifest, profile, run, opts, isTTY, log };
+
+    if (!opts.dryRun && (selected('skills') || selected('mcp'))) {
+      const lines = listSources(profile, manifest, new Set(['skills', 'mcp']).intersection(opts.only ?? new Set(['skills', 'mcp'])));
+      if (lines.length) {
+        log('Third-party sources this run will install from:');
+        for (const l of lines) log(`  ${l}`);
+        if (!(await confirm('Continue?', { yes: opts.yes, isTTY, ask }))) {
+          log('Cancelled. Nothing was changed.');
+          return 1;
+        }
+      }
+    }
+
+    const results = [];
+    if (selected('agents')) results.push(...(await installAgents(ctx)));
+    if (selected('rules')) results.push(...(await installRules(ctx)));
+    if (selected('skills')) results.push(...(await installSkills(ctx)));
+    if (selected('mcp')) results.push(...(await installMcp(ctx)));
+    if (selected('plugins') && profile.plugins.length) {
+      if (opts.skipUser) {
+        results.push(...profile.plugins.map((item) => ({ layer: 'plugins', item, status: 'skipped', detail: '--skip-user' })));
+      } else {
+        let go = true;
+        if (!opts.dryRun) {
+          log('Plugins install for the whole machine (user scope):');
+          for (const l of listSources(profile, manifest, new Set(['plugins']))) log(`  ${l}`);
+          go = await confirm('Install plugins?', { yes: opts.yes, isTTY, ask });
+        }
+        if (go) results.push(...(await installPlugins(ctx)));
+        else results.push(...profile.plugins.map((item) => ({ layer: 'plugins', item, status: 'skipped', detail: 'declined' })));
+      }
+    }
+    log(formatSummary(results));
+    return results.some((r) => r.status === 'failed') ? 1 : 0;
+  } catch (e) {
+    log(`error: ${e.message}`);
+    return 1;
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
