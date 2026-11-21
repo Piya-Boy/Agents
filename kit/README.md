@@ -21,7 +21,7 @@ From a clone, run `node path/to/kit/install.mjs` with the same flags.
 
 | Flag | Meaning |
 |---|---|
-| `--profile NAME[,NAME]` | `core` (default, always included): general software work. `web` adds the web agents, Chrome DevTools MCP, and the `ui-ux-pro-max` plugin. `superpowers` adds the `superpowers` plugin (its hook makes the agent check skills before every reply, which uses more context). Combine them, for example `--profile web,superpowers` |
+| `--profile NAME[,NAME]` | `core` (default, always included): general software work. `web` adds the web agents, Chrome DevTools MCP, and the `ui-ux-pro-max` plugin. `superpowers` adds the `superpowers` plugin (its hook makes the agent check skills before every reply, which uses more context). Combine them, for example `--profile web,superpowers`, or use `all` for every profile |
 | `--dry-run` | Print every action, change nothing |
 | `--yes` | Skip the confirmation prompts |
 | `--skip-user` | Do not install plugins (they change your whole machine, not just the project) |

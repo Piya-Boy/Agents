@@ -51,8 +51,10 @@ export function resolveProfile(manifest, name, seen = []) {
 }
 
 // Combine profiles. `core` always comes first; repeated names and items are dropped.
+// `all` stands for every profile in kit.json, so a profile added later is included too.
 export function resolveProfiles(manifest, names) {
-  const order = ['core', ...names.filter((n) => n !== 'core')];
+  const expanded = names.flatMap((n) => (n === 'all' ? Object.keys(manifest.profiles || {}) : [n]));
+  const order = ['core', ...expanded.filter((n) => n !== 'core')];
   const out = { name: order.join('+'), names: [], agentDirs: [], skills: [], bundledSkills: [], mcp: [], plugins: [] };
   const addUnique = (list, items) => {
     for (const it of items) if (!list.includes(it)) list.push(it);
