@@ -5,7 +5,7 @@ import { parseArgs, resolveCommand, assertSafeCmdArgs, createRunner } from '../i
 
 test('parseArgs flags', () => {
   const o = parseArgs(['--profile', 'web', '--dry-run', '--yes', '--skip-user', '--only', 'skills,mcp']);
-  assert.equal(o.profile, 'web');
+  assert.deepEqual(o.profiles, ['web']);
   assert.equal(o.dryRun, true);
   assert.equal(o.yes, true);
   assert.equal(o.skipUser, true);
@@ -15,9 +15,11 @@ test('parseArgs flags', () => {
 
 test('parseArgs defaults and errors', () => {
   const o = parseArgs([]);
-  assert.equal(o.profile, 'core');
+  assert.deepEqual(o.profiles, ['core']);
   assert.equal(o.only, null);
-  assert.throws(() => parseArgs(['--profile', 'x']), /--profile must be core or web/);
+  assert.deepEqual(parseArgs(['--profile', 'web,superpowers']).profiles, ['web', 'superpowers']);
+  assert.throws(() => parseArgs(['--profile']), /--profile needs a name/);
+  assert.throws(() => parseArgs(['--profile', ',']), /--profile needs a name/);
   assert.throws(() => parseArgs(['--bogus']), /unknown flag: --bogus/);
   assert.throws(() => parseArgs(['--only', 'agents,zzz']), /unknown layer zzz/);
 });

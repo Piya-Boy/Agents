@@ -203,3 +203,33 @@ test('running through a symlink or junction still runs main', async () => {
   assert.equal(r.status, 1);
   assert.match(r.stdout + r.stderr, /unknown flag: --bogus/);
 });
+
+test('main: unknown profile exits 1 with a clear message', async () => {
+  const dir = await makeTempProject();
+  const logs = [];
+  const code = await main(['--profile', 'nope'], { projectDir: dir, env: okEnv, log: (l) => logs.push(l), run: fakeRunner().run });
+  assert.equal(code, 1);
+  assert.match(logs.join(' '), /unknown profile: nope/);
+  assert.deepEqual(await fs.readdir(dir), []);
+});
+
+test('main: --profile superpowers adds the plugin to core, without web agents', async () => {
+  const dir = await makeTempProject();
+  const f = fakeRunner((cmd, args) => (args[0] === 'plugin' && args[1] === 'list' ? { stdout: '[]' } : {}));
+  const code = await main(['--profile', 'superpowers', '--yes', '--only', 'agents,rules,plugins'], {
+    projectDir: dir, env: okEnv, log() {}, isTTY: true, run: f.run,
+  });
+  assert.equal(code, 0);
+  assert.ok(f.calls.some((c) => c.args[1] === 'install' && c.args[2] === 'superpowers@claude-plugins-official'));
+  assert.equal((await fs.readdir(path.join(dir, '.claude/agents'))).length, 10);
+  const agents = await fs.readFile(path.join(dir, 'AGENTS.md'), 'utf8');
+  assert.ok(!agents.includes('profile:web'));
+});
+
+test('main: --profile web,superpowers keeps the web section', async () => {
+  const dir = await makeTempProject();
+  const code = await main(['--profile', 'web,superpowers', '--only', 'rules,agents'], { projectDir: dir, env: okEnv, log() {}, run: fakeRunner().run });
+  assert.equal(code, 0);
+  assert.ok((await fs.readFile(path.join(dir, 'AGENTS.md'), 'utf8')).includes('profile:web:start'));
+  assert.equal((await fs.readdir(path.join(dir, '.claude/agents'))).length, 13);
+});

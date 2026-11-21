@@ -38,15 +38,37 @@ export function resolveProfile(manifest, name, seen = []) {
   if (seen.includes(name)) throw new Error(`profile extends cycle: ${[...seen, name].join(' -> ')}`);
   const base = def.extends
     ? resolveProfile(manifest, def.extends, [...seen, name])
-    : { agentDirs: [], skills: [], bundledSkills: [], mcp: [], plugins: [] };
+    : { names: [], agentDirs: [], skills: [], bundledSkills: [], mcp: [], plugins: [] };
   return {
     name,
+    names: [...base.names, name],
     agentDirs: [...base.agentDirs, ...(def.agents ? [def.agents] : [])],
     skills: [...base.skills, ...(def.skills || [])],
     bundledSkills: [...base.bundledSkills, ...(def.bundledSkills || [])],
     mcp: [...base.mcp, ...(def.mcp || [])],
     plugins: [...base.plugins, ...(def.plugins || [])],
   };
+}
+
+// Combine profiles. `core` always comes first; repeated names and items are dropped.
+export function resolveProfiles(manifest, names) {
+  const order = ['core', ...names.filter((n) => n !== 'core')];
+  const out = { name: order.join('+'), names: [], agentDirs: [], skills: [], bundledSkills: [], mcp: [], plugins: [] };
+  const addUnique = (list, items) => {
+    for (const it of items) if (!list.includes(it)) list.push(it);
+  };
+  for (const n of order) {
+    const p = resolveProfile(manifest, n);
+    addUnique(out.names, p.names);
+    addUnique(out.agentDirs, p.agentDirs);
+    addUnique(out.bundledSkills, p.bundledSkills);
+    addUnique(out.mcp, p.mcp);
+    addUnique(out.plugins, p.plugins);
+    for (const s of p.skills) {
+      if (!out.skills.some((x) => x.repo === s.repo && JSON.stringify(x.skills) === JSON.stringify(s.skills))) out.skills.push(s);
+    }
+  }
+  return out;
 }
 
 function isEntryPoint() {
@@ -62,7 +84,7 @@ export const LAYERS = ['agents', 'rules', 'skills', 'mcp', 'plugins'];
 
 export function parseArgs(argv) {
   const o = {
-    profile: 'core',
+    profiles: ['core'],
     dryRun: false,
     yes: false,
     skipUser: false,
@@ -72,8 +94,8 @@ export function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--profile') {
-      o.profile = argv[++i];
-      if (o.profile !== 'core' && o.profile !== 'web') throw new Error('--profile must be core or web');
+      o.profiles = String(argv[++i] ?? '').split(',').map((n) => n.trim()).filter(Boolean);
+      if (!o.profiles.length) throw new Error('--profile needs a name (for example core, web, or web,superpowers)');
     } else if (a === '--dry-run') o.dryRun = true;
     else if (a === '--yes') o.yes = true;
     else if (a === '--skip-user') o.skipUser = true;
@@ -251,7 +273,7 @@ export async function installRules(ctx) {
   const mergeNote = 'exists, left untouched: merge the kit rules by hand';
   for (const f of ['AGENTS.md', 'CLAUDE.md']) {
     const transform =
-      f === 'AGENTS.md' && ctx.profile.name === 'core' ? (t) => stripProfileBlock(t, 'web') : undefined;
+      f === 'AGENTS.md' && !ctx.profile.names.includes('web') ? (t) => stripProfileBlock(t, 'web') : undefined;
     results.push(
       await copyNew({
         layer: 'rules',
@@ -507,7 +529,7 @@ export async function main(argv, deps = {}) {
       return 1;
     }
     const manifest = await loadManifest(kitDir);
-    const profile = resolveProfile(manifest, opts.profile);
+    const profile = resolveProfiles(manifest, opts.profiles);
     const run = deps.run ?? createRunner({ dryRun: opts.dryRun, log, spawnFn: deps.spawnFn, env: cmdEnv });
     const selected = (l) => !opts.only || opts.only.has(l);
     const ctx = { kitDir, projectDir: opts.projectDir, manifest, profile, run, opts, isTTY, log };

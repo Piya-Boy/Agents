@@ -14,11 +14,12 @@ Run from the root of the project you want to set up:
 
 ```bash
 node path/to/kit/install.mjs --profile core
+node path/to/kit/install.mjs --profile web,superpowers
 ```
 
 | Flag | Meaning |
 |---|---|
-| `--profile core\|web` | `core` (default): general software work, plus the `superpowers` plugin. `web` adds the web agents, Chrome DevTools MCP, and the `ui-ux-pro-max` plugin |
+| `--profile NAME[,NAME]` | `core` (default, always included): general software work. `web` adds the web agents, Chrome DevTools MCP, and the `ui-ux-pro-max` plugin. `superpowers` adds the `superpowers` plugin (its hook makes the agent check skills before every reply, which uses more context). Combine them, for example `--profile web,superpowers` |
 | `--dry-run` | Print every action, change nothing |
 | `--yes` | Skip the confirmation prompts |
 | `--skip-user` | Do not install plugins (they change your whole machine, not just the project) |

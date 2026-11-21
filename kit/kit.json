@@ -12,7 +12,7 @@
       ],
       "bundledSkills": ["software-engineer"],
       "mcp": ["context7"],
-      "plugins": ["superpowers"]
+      "plugins": []
     },
     "web": {
       "extends": "core",
@@ -20,6 +20,9 @@
       "skills": [{ "repo": "GoogleChrome/modern-web-guidance", "skills": ["modern-web-guidance"] }],
       "mcp": ["chrome-devtools"],
       "plugins": ["ui-ux-pro-max"]
+    },
+    "superpowers": {
+      "plugins": ["superpowers"]
     }
   },
   "mcp": {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadManifest, resolveProfile } from '../install.mjs';
+import { loadManifest, resolveProfile, resolveProfiles } from '../install.mjs';
 
 const kitDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -12,7 +12,24 @@ test('resolveProfile core', async () => {
   const p = resolveProfile(m, 'core');
   assert.deepEqual(p.agentDirs, ['agents/core']);
   assert.deepEqual(p.mcp, ['context7']);
-  assert.deepEqual(p.plugins, ['superpowers']);
+  assert.deepEqual(p.plugins, []);
+  assert.deepEqual(p.names, ['core']);
+});
+
+test('resolveProfiles combines profiles, core always first, no duplicates', async () => {
+  const m = await loadManifest(kitDir);
+  const a = resolveProfiles(m, ['web', 'superpowers']);
+  assert.deepEqual(a.names, ['core', 'web', 'superpowers']);
+  assert.deepEqual(a.agentDirs, ['agents/core', 'agents/web']);
+  assert.deepEqual(a.plugins, ['ui-ux-pro-max', 'superpowers']);
+  const b = resolveProfiles(m, ['superpowers']);
+  assert.deepEqual(b.names, ['core', 'superpowers']);
+  assert.deepEqual(b.agentDirs, ['agents/core']);
+  assert.deepEqual(b.plugins, ['superpowers']);
+  const c = resolveProfiles(m, ['web', 'web', 'core']);
+  assert.deepEqual(c.names, ['core', 'web']);
+  assert.deepEqual(c.mcp, ['context7', 'chrome-devtools']);
+  assert.throws(() => resolveProfiles(m, ['nope']), /unknown profile: nope/);
 });
 
 test('resolveProfile web extends core', async () => {
@@ -20,7 +37,8 @@ test('resolveProfile web extends core', async () => {
   const p = resolveProfile(m, 'web');
   assert.deepEqual(p.agentDirs, ['agents/core', 'agents/web']);
   assert.deepEqual(p.mcp, ['context7', 'chrome-devtools']);
-  assert.deepEqual(p.plugins, ['superpowers', 'ui-ux-pro-max']);
+  assert.deepEqual(p.plugins, ['ui-ux-pro-max']);
+  assert.deepEqual(p.names, ['core', 'web']);
   const last = p.skills[p.skills.length - 1];
   assert.deepEqual(last, { repo: 'GoogleChrome/modern-web-guidance', skills: ['modern-web-guidance'] });
   assert.equal(p.skills[0].repo, 'addyosmani/agent-skills');
