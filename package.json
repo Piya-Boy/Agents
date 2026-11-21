@@ -1,0 +1,27 @@
+{
+  "name": "agent-kit",
+  "version": "0.1.0",
+  "description": "Claude Code agent kit: sub-agents, rules, skills, and MCP servers installed with one command.",
+  "bin": {
+    "agent-kit": "kit/install.mjs"
+  },
+  "files": [
+    "kit/install.mjs",
+    "kit/kit.json",
+    "kit/README.md",
+    "kit/agents",
+    "kit/skills",
+    "kit/templates",
+    "kit/hooks"
+  ],
+  "engines": {
+    "node": ">=22.20.0"
+  },
+  "scripts": {
+    "test": "node --test \"kit/test/*.test.mjs\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Piya-Boy/Agents.git"
+  }
+}

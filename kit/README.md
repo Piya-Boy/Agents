@@ -13,9 +13,11 @@ The main agent plans and hands work to specialist agents. Each agent picks the s
 Run from the root of the project you want to set up:
 
 ```bash
-node path/to/kit/install.mjs --profile core
-node path/to/kit/install.mjs --profile web,superpowers
+npx github:Piya-Boy/Agents --profile core
+npx github:Piya-Boy/Agents --profile web,superpowers
 ```
+
+From a clone, run `node path/to/kit/install.mjs` with the same flags.
 
 | Flag | Meaning |
 |---|---|
