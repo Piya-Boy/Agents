@@ -12,6 +12,18 @@ One Node script installs the whole kit into a project.
 - **Skills on demand.** Agent files only hint at skills. The agent loads one when the task matches, so unused skills cost nothing.
 - **Your language.** Replies follow the language you write in. Thai goes through the `thai-natural-writing` skill.
 
+## Self-contained
+
+The kit does not rely on anyone's personal `~/.claude/CLAUDE.md`. Every rule the agents need is written into the `AGENTS.md` the installer creates in your project:
+
+- when to hand work to which agent, and the checks to run before calling a task done
+- look up current docs for your library versions before writing code
+- git rules: branch names, Conventional Commits, review the diff first, no secrets, no push without your say-so, and no `Co-Authored-By` or "Generated with ..." lines
+- keep large raw output (logs, test runs) out of the main context
+- when you write Thai, replies go through the `thai-natural-writing` skill
+
+Your own preferences (tone, editor habits, tools the kit does not install) belong in your personal `~/.claude/CLAUDE.md`. Keep those out of the project's `AGENTS.md` so the kit works the same for everyone.
+
 ## Quick start
 
 Requirements: Node 22.20.0 or newer, `git`, and the `claude` CLI on your PATH.
