@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseAgent, convertAgent } from './convert.mjs';
+import { writeMcpServers } from './mcp-config.mjs';
 
 const stripBom = (t) => (t.charCodeAt(0) === 0xfeff ? t.slice(1) : t);
 
@@ -498,7 +499,7 @@ export async function listInstalledPluginIds(run, cwd) {
   }
 }
 
-export async function installMcp(ctx) {
+async function installMcpClaude(ctx) {
   const names = ctx.profile.mcp;
   if (!names.length) return [];
   let servers;
@@ -530,6 +531,18 @@ export async function installMcp(ctx) {
         ? { layer: 'mcp', item, status: ctx.opts.dryRun ? 'dry-run' : 'installed', ...(covering ? { detail: `plugin ${covering} also provides it` } : {}) }
         : { layer: 'mcp', item, status: 'failed', detail: lastLine(r.stderr) },
     );
+  }
+  return results;
+}
+
+export async function installMcp(ctx) {
+  const tools = toolsOf(ctx);
+  const results = [];
+  if (tools.includes('claude')) results.push(...(await installMcpClaude(ctx)));
+  const servers = ctx.profile.mcp.map((name) => ({ name, def: ctx.manifest.mcp[name] }));
+  for (const tool of tools.filter((t) => t !== 'claude')) {
+    const rows = await writeMcpServers({ tool, projectDir: ctx.projectDir, servers, dryRun: ctx.opts.dryRun });
+    results.push(...rows.map((r) => ({ layer: 'mcp', ...r })));
   }
   return results;
 }
@@ -679,6 +692,8 @@ export function formatSummary(results, tools = ['claude']) {
     ...(tools.includes('claude')
       ? ['Restart Claude Code (plugins load on start).', 'Run `claude` in this project and approve the project MCP servers when asked.']
       : []),
+    ...(tools.includes('codex') ? ['Codex reads `.codex/config.toml` (MCP servers) only in a project you have marked as trusted.'] : []),
+    ...(tools.includes('gemini') ? ['Gemini CLI reads `.gemini/settings.json` (MCP servers) only in a trusted folder.'] : []),
     'Fill the TODO lines in AGENTS.md.',
   ];
   out.push('', 'Next steps:', ...steps.map((t, i) => `  ${i + 1}. ${t}`));
@@ -719,7 +734,7 @@ export async function main(argv, deps = {}) {
     const others = opts.tools.filter((t) => t !== 'claude').join(',');
     const ctx = { kitDir, projectDir: opts.projectDir, manifest, profile, run, opts, isTTY, log };
 
-    const needsConsent = new Set(['skills', ...(hasClaude ? ['mcp'] : [])]).intersection(opts.only ?? new Set(['skills', 'mcp']));
+    const needsConsent = new Set(['skills', 'mcp']).intersection(opts.only ?? new Set(['skills', 'mcp']));
     if (!opts.dryRun && needsConsent.size) {
       const lines = listSources(profile, manifest, needsConsent);
       if (lines.length) {
@@ -733,16 +748,12 @@ export async function main(argv, deps = {}) {
     }
 
     const results = [];
-    // Layers that are written only for Claude Code for now; other tools get a visible "skipped" row.
-    const later = (layer) => results.push({ layer, item: others, status: 'skipped', detail: `not available for ${others} yet` });
+    // Plugins and hooks exist only for Claude Code; other tools get a visible "skipped" row.
     const claudeOnly = (layer) => results.push({ layer, item: others, status: 'skipped', detail: 'Claude Code only' });
     if (selected('agents')) results.push(...(await installAgents(ctx)));
     if (selected('rules')) results.push(...(await installRules(ctx)));
     if (selected('skills')) results.push(...(await installSkills(ctx)));
-    if (selected('mcp') && profile.mcp.length) {
-      if (hasClaude) results.push(...(await installMcp(ctx)));
-      if (others) later('mcp');
-    }
+    if (selected('mcp') && profile.mcp.length) results.push(...(await installMcp(ctx)));
     if (opts.autoCheck || opts.only?.has('hooks')) {
       if (hasClaude) results.push(...(await installAutoCheck(ctx)));
       else claudeOnly('hooks');

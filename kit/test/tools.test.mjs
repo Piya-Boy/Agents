@@ -90,32 +90,33 @@ test('formatSummary next steps depend on the tools', () => {
   assert.match(claude, /3\. Fill the TODO lines/);
   const codex = formatSummary(rows, ['codex']);
   assert.ok(!/Claude Code/.test(codex));
-  assert.match(codex, /1\. Fill the TODO lines/);
+  assert.match(codex, /1\. Codex reads `\.codex\/config\.toml`/);
+  assert.match(codex, /2\. Fill the TODO lines/);
+  assert.match(formatSummary(rows, ['gemini']), /1\. Gemini CLI reads `\.gemini\/settings\.json`/);
+  assert.ok(!/trusted/.test(formatSummary(rows, ['cursor', 'copilot'])));
 });
 
-test('main --tool codex: no claude CLI needed, writes only AGENTS.md, others reported as skipped', async () => {
+test('main --tool codex: no claude CLI needed, rules only writes AGENTS.md and spawns nothing', async () => {
   const dir = await makeTempProject();
   const logs = [];
   const f = fakeRunner();
-  const code = await main(['--tool', 'codex', '--only', 'rules,mcp', '--yes'], { projectDir: dir, env: noClaudeEnv, log: (l) => logs.push(l), isTTY: false, run: f.run });
+  const code = await main(['--tool', 'codex', '--only', 'rules', '--yes'], { projectDir: dir, env: noClaudeEnv, log: (l) => logs.push(l), isTTY: false, run: f.run });
   assert.equal(code, 0);
   assert.deepEqual((await fs.readdir(dir)).sort(), ['AGENTS.md']);
   assert.equal(f.calls.length, 0, 'no command is spawned');
   const out = logs.join('\n');
-  assert.match(out, /skipped +codex \(not available for codex yet\)/);
   assert.ok(!/Third-party sources/.test(out));
   assert.ok(!/Restart Claude Code/.test(out));
 });
 
-test('main --tool claude,codex: claude layers run and codex gets skipped rows', async () => {
+test('main --tool claude,codex: claude mcp add runs and codex gets its own config file', async () => {
   const dir = await makeTempProject();
-  const logs = [];
   const f = fakeRunner((cmd, args) => (args[0] === 'plugin' ? { stdout: '[]' } : {}));
-  const code = await main(['--tool', 'claude,codex', '--only', 'rules,mcp', '--yes'], { projectDir: dir, env: okEnv, log: (l) => logs.push(l), isTTY: false, run: f.run });
+  const code = await main(['--tool', 'claude,codex', '--only', 'rules,mcp', '--yes'], { projectDir: dir, env: okEnv, log() {}, isTTY: false, run: f.run });
   assert.equal(code, 0);
   assert.ok(f.calls.some((c) => c.args[0] === 'mcp'), 'claude mcp add still runs');
   assert.equal(await exists(path.join(dir, 'CLAUDE.md')), true);
-  assert.match(logs.join('\n'), /skipped +codex \(not available for codex yet\)/);
+  assert.match(await fs.readFile(path.join(dir, '.codex/config.toml'), 'utf8'), /\[mcp_servers\.context7\]/);
 });
 
 test('main --tool codex with --auto-check and plugins: reported as Claude Code only', async () => {
