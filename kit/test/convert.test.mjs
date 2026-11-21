@@ -136,7 +136,7 @@ test('every real kit agent converts for every tool', async () => {
     for (const f of (await fs.readdir(path.join(kitDir, dir))).filter((x) => x.endsWith('.md'))) {
       const agent = parseAgent(await fs.readFile(path.join(kitDir, dir, f), 'utf8'));
       assert.equal(`${agent.name}.md`, f, 'file name matches the agent name');
-      for (const tool of ['codex', 'cursor', 'gemini', 'copilot', 'antigravity']) {
+      for (const tool of ['codex', 'cursor', 'gemini', 'copilot', 'antigravity', 'opencode']) {
         const out = convertAgent(tool, agent);
         assert.ok(out.content.includes(agent.body.trim().split('\n')[0]), `${tool}:${f} keeps the body`);
         assert.match(path.basename(out.path), /^[a-z0-9-]+\.(toml|md|agent\.md)$/);
@@ -234,4 +234,25 @@ test('installAgents: antigravity writes 10 files under .agents/agents and nothin
   assert.ok(res.every((r) => r.status === 'installed' && r.item.startsWith('.agents/agents/')));
   assert.deepEqual((await fs.readdir(dir)).sort(), ['.agents']);
   assert.deepEqual(await fs.readdir(path.join(dir, '.agents')), ['agents']);
+});
+
+test('opencode: subagent in .opencode/agents; tool limits become deny rules', () => {
+  const ro = convertAgent('opencode', parseAgent(readOnlyAgent));
+  assert.equal(ro.path, '.opencode/agents/architect.md');
+  assert.match(ro.content, /^---\ndescription: "Designs \\"systems\\": the big picture\."\nmode: subagent\npermission: \{ edit: deny, bash: deny \}\n---\n\nYou are the architect\./);
+  assert.ok(!ro.content.includes('read-only'), 'enforced by permission, so no prose note');
+  assert.ok(!/^model:/m.test(ro.content));
+  const dev = convertAgent('opencode', parseAgent(builderAgent));
+  assert.match(dev.content, /^---\ndescription: "Implements changes\."\nmode: subagent\n---\n/);
+  assert.ok(!dev.content.includes('permission'));
+  const reviewer = convertAgent('opencode', parseAgent('---\nname: reviewer\ndescription: Reviews.\ntools: Read, Grep, Glob, Bash, Skill\n---\n\nReview.\n'));
+  assert.match(reviewer.content, /permission: \{ edit: deny \}/, 'Bash stays allowed when the agent had it');
+});
+
+test('installAgents: opencode writes 10 files under .opencode/agents and nothing else', async () => {
+  const dir = await makeTempProject();
+  const res = await installAgents(await agentsCtx(dir, ['opencode']));
+  assert.equal(res.length, 10);
+  assert.ok(res.every((r) => r.status === 'installed' && r.item.startsWith('.opencode/agents/')));
+  assert.deepEqual(await fs.readdir(dir), ['.opencode']);
 });

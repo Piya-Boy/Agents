@@ -8,6 +8,7 @@
 //   gemini   .gemini/agents/<name>.md           Markdown; tool names differ from Claude's, so no `tools`
 //   copilot  .github/agents/<name>.agent.md     Markdown; accepts Claude tool names as aliases
 //   antigravity  .agents/agents/<name>.md       Markdown; `tools` defaults to none, so it must be listed, in its own tool names
+//   opencode .opencode/agents/<name>.md         Markdown; `mode: subagent`, limits via `permission` (v1 frontmatter, which v2 still reads)
 
 export function parseAgent(text) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
@@ -128,6 +129,19 @@ export function convertAgent(tool, agent) {
           note + body,
         ),
       };
+    case 'opencode': {
+      // Claude's tool list becomes deny rules: no write tools -> no edit, no Bash -> no bash.
+      const deny = [];
+      if (isReadOnly(agent)) deny.push('edit: deny');
+      if (agent.tools && !agent.tools.includes('Bash')) deny.push('bash: deny');
+      return {
+        path: `.opencode/agents/${agent.name}.md`,
+        content: mdAgent(
+          { description: q(agent.description), mode: 'subagent', permission: deny.length ? `{ ${deny.join(', ')} }` : null },
+          body,
+        ),
+      };
+    }
     default:
       return null;
   }

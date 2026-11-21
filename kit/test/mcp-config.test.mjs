@@ -21,6 +21,7 @@ test('file paths per tool', () => {
     gemini: '.gemini/settings.json',
     codex: '.codex/config.toml',
     antigravity: '.agents/mcp_config.json',
+    opencode: 'opencode.json',
   });
 });
 
@@ -175,4 +176,38 @@ test('antigravity: .agents/mcp_config.json with command and args', async () => {
   assert.equal(rows[0].status, 'installed');
   assert.deepEqual(JSON.parse(await read(dir, '.agents/mcp_config.json')).mcpServers.context7, { command: 'npx', args: ['-y', '@upstash/context7-mcp'] });
   assert.equal(await exists(path.join(dir, '.gemini')), false, 'Gemini CLI settings are not touched');
+});
+
+test('opencode: new file gets $schema and v1-style mcp entries (type local, command array)', async () => {
+  const dir = await makeTempProject();
+  const rows = await writeMcpServers({ tool: 'opencode', projectDir: dir, servers: [c7, cd], dryRun: false });
+  assert.deepEqual(rows.map((r) => r.status), ['installed', 'installed']);
+  const obj = JSON.parse(await read(dir, 'opencode.json'));
+  assert.equal(obj.$schema, 'https://opencode.ai/config.json');
+  assert.deepEqual(obj.mcp.context7, { type: 'local', command: ['npx', '-y', '@upstash/context7-mcp'] });
+  assert.deepEqual(Object.keys(obj.mcp), ['context7', 'chrome-devtools']);
+  assert.equal(obj.mcpServers, undefined);
+});
+
+test('opencode: existing v1 config keeps every key and skips servers that exist', async () => {
+  const dir = await makeTempProject();
+  await fs.writeFile(path.join(dir, 'opencode.json'), JSON.stringify({ model: 'x/y', mcp: { context7: { type: 'remote', url: 'u' } } }));
+  const rows = await writeMcpServers({ tool: 'opencode', projectDir: dir, servers: [c7, cd], dryRun: false });
+  assert.deepEqual(rows.map((r) => r.status), ['skipped', 'installed']);
+  const obj = JSON.parse(await read(dir, 'opencode.json'));
+  assert.equal(obj.model, 'x/y');
+  assert.deepEqual(obj.mcp.context7, { type: 'remote', url: 'u' });
+  assert.ok(obj.mcp['chrome-devtools']);
+  assert.equal(obj.$schema, undefined, 'an existing file is not given a $schema');
+});
+
+test('opencode: a file already on the v2 layout gets entries under mcp.servers', async () => {
+  const dir = await makeTempProject();
+  await fs.writeFile(path.join(dir, 'opencode.json'), JSON.stringify({ mcp: { timeout: { catalog: 5 }, servers: { mine: { type: 'local', command: ['x'] } } } }));
+  await writeMcpServers({ tool: 'opencode', projectDir: dir, servers: [c7], dryRun: false });
+  const obj = JSON.parse(await read(dir, 'opencode.json'));
+  assert.deepEqual(obj.mcp.timeout, { catalog: 5 });
+  assert.ok(obj.mcp.servers.mine);
+  assert.deepEqual(obj.mcp.servers.context7, { type: 'local', command: ['npx', '-y', '@upstash/context7-mcp'] });
+  assert.equal(obj.mcp.context7, undefined);
 });

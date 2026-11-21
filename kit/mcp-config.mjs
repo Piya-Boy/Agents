@@ -6,6 +6,8 @@
 //   gemini   .gemini/settings.json  JSON settings file; servers go under "mcpServers"
 //   codex    .codex/config.toml     TOML, one [mcp_servers.<name>] table per server
 //   antigravity  .agents/mcp_config.json  JSON, top-level "mcpServers" (Gemini CLI's settings.json is not read)
+//   opencode opencode.json          JSON; servers under "mcp" (v1 format, still read by v2) or "mcp.servers" when the
+//                                   file already uses the v2 layout; entries are { type: "local", command: [..] }
 //
 // Claude Code is handled by `claude mcp add` in install.mjs. Nothing here overwrites an entry
 // that already exists, and a file that cannot be parsed is left untouched.
@@ -19,6 +21,7 @@ export const MCP_FILES = {
   gemini: '.gemini/settings.json',
   codex: '.codex/config.toml',
   antigravity: '.agents/mcp_config.json',
+  opencode: 'opencode.json',
 };
 
 const stripBom = (t) => (t.charCodeAt(0) === 0xfeff ? t.slice(1) : t);
@@ -32,13 +35,17 @@ async function readIfExists(file) {
   }
 }
 
+const OPENCODE_SCHEMA = 'https://opencode.ai/config.json';
+const isPlainObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+
 function jsonEntry(tool, def) {
+  if (tool === 'opencode') return { type: 'local', command: [def.command, ...def.args] };
   return tool === 'copilot' ? { type: 'stdio', command: def.command, args: def.args } : { command: def.command, args: def.args };
 }
 
 async function writeJson({ tool, rel, file, servers, dryRun }) {
   const row = (name, status, detail) => ({ item: `${name} (${rel})`, status, ...(detail ? { detail } : {}) });
-  let obj = {};
+  let obj = tool === 'opencode' ? { $schema: OPENCODE_SCHEMA } : {};
   const text = await readIfExists(file);
   if (text !== null && stripBom(text).trim()) {
     try {
@@ -50,7 +57,9 @@ async function writeJson({ tool, rel, file, servers, dryRun }) {
       return servers.map(({ name }) => row(name, 'failed', `${rel} is not a JSON object; left untouched`));
     }
   }
-  const existing = obj.mcpServers && typeof obj.mcpServers === 'object' && !Array.isArray(obj.mcpServers) ? obj.mcpServers : {};
+  // OpenCode: servers sit directly under "mcp" (v1), or under "mcp.servers" if the file already uses the v2 layout.
+  const v2 = tool === 'opencode' && isPlainObject(obj.mcp) && isPlainObject(obj.mcp.servers);
+  const existing = tool === 'opencode' ? (v2 ? obj.mcp.servers : isPlainObject(obj.mcp) ? obj.mcp : {}) : isPlainObject(obj.mcpServers) ? obj.mcpServers : {};
   const results = [];
   const add = {};
   for (const { name, def } of servers) {
@@ -63,7 +72,9 @@ async function writeJson({ tool, rel, file, servers, dryRun }) {
   if (dryRun || !Object.keys(add).length) return results;
   try {
     await fs.mkdir(path.dirname(file), { recursive: true });
-    const next = { ...obj, mcpServers: { ...existing, ...add } };
+    const merged = { ...existing, ...add };
+    const next =
+      tool !== 'opencode' ? { ...obj, mcpServers: merged } : v2 ? { ...obj, mcp: { ...obj.mcp, servers: merged } } : { ...obj, mcp: merged };
     const crlf = text !== null && text.includes('\r\n');
     const out = `${JSON.stringify(next, null, 2)}\n`;
     await fs.writeFile(file, crlf ? out.replace(/\n/g, '\r\n') : out);
