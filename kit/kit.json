@@ -12,7 +12,7 @@
       ],
       "bundledSkills": ["software-engineer"],
       "mcp": ["context7"],
-      "plugins": []
+      "plugins": ["superpowers"]
     },
     "web": {
       "extends": "core",
@@ -27,6 +27,7 @@
     "chrome-devtools": { "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest"], "coveredByPlugin": "chrome-devtools-mcp@" }
   },
   "plugins": {
+    "superpowers": { "marketplace": "anthropics/claude-plugins-official", "id": "superpowers@claude-plugins-official" },
     "ui-ux-pro-max": { "marketplace": "nextlevelbuilder/ui-ux-pro-max-skill", "id": "ui-ux-pro-max@ui-ux-pro-max-skill" }
   }
 }

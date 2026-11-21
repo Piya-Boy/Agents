@@ -12,7 +12,7 @@ test('resolveProfile core', async () => {
   const p = resolveProfile(m, 'core');
   assert.deepEqual(p.agentDirs, ['agents/core']);
   assert.deepEqual(p.mcp, ['context7']);
-  assert.deepEqual(p.plugins, []);
+  assert.deepEqual(p.plugins, ['superpowers']);
 });
 
 test('resolveProfile web extends core', async () => {
@@ -20,7 +20,7 @@ test('resolveProfile web extends core', async () => {
   const p = resolveProfile(m, 'web');
   assert.deepEqual(p.agentDirs, ['agents/core', 'agents/web']);
   assert.deepEqual(p.mcp, ['context7', 'chrome-devtools']);
-  assert.deepEqual(p.plugins, ['ui-ux-pro-max']);
+  assert.deepEqual(p.plugins, ['superpowers', 'ui-ux-pro-max']);
   const last = p.skills[p.skills.length - 1];
   assert.deepEqual(last, { repo: 'GoogleChrome/modern-web-guidance', skills: ['modern-web-guidance'] });
   assert.equal(p.skills[0].repo, 'addyosmani/agent-skills');

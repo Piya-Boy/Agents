@@ -18,7 +18,7 @@ node path/to/kit/install.mjs --profile core
 
 | Flag | Meaning |
 |---|---|
-| `--profile core\|web` | `core` (default): general software work. `web` adds the web agents, Chrome DevTools MCP, and the `ui-ux-pro-max` plugin |
+| `--profile core\|web` | `core` (default): general software work, plus the `superpowers` plugin. `web` adds the web agents, Chrome DevTools MCP, and the `ui-ux-pro-max` plugin |
 | `--dry-run` | Print every action, change nothing |
 | `--yes` | Skip the confirmation prompts |
 | `--skip-user` | Do not install plugins (they change your whole machine, not just the project) |
