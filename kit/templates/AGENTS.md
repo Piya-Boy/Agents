@@ -62,6 +62,7 @@ AI training data can be older than the versions this project uses (for example, 
 - Agents return a short result. The main agent checks the evidence before telling the user it is done.
 - Run independent agents in parallel. Never let two agents write the same files at once.
 - Do not claim success without evidence from `tester` or a command you ran.
+- Keep large raw output (logs, test runs, git history, big files) out of the main context: filter or summarize it with a command or script, or give the reading to an agent, and keep only the relevant lines.
 
 <!-- profile:web:start -->
 ## Profile: web
