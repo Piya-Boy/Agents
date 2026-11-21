@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Agent kit installer. Node stdlib only. See docs/superpowers/specs/2026-11-21-installer-design.md
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -147,6 +147,85 @@ export function createRunner({ dryRun, log, spawnFn = spawn, env = defaultEnv() 
       child.on('close', (code) => finish({ code: code ?? 1, stdout: out, stderr: err }));
     });
   };
+}
+
+export function stripProfileBlock(text, name) {
+  const start = `<!-- profile:${name}:start -->`;
+  const end = `<!-- profile:${name}:end -->`;
+  const lines = text.split(/(?<=\n)/);
+  const out = [];
+  let skipping = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (t === start) skipping = true;
+    else if (skipping && t === end) skipping = false;
+    else if (!skipping) out.push(line);
+  }
+  return out.join('');
+}
+
+const pathExists = (p) => fs.access(p).then(() => true, () => false);
+
+// Create-only copy: never overwrites an existing destination.
+async function copyNew({ layer, item, src, dest, dryRun, transform, existsDetail = 'already exists, left untouched' }) {
+  if (await pathExists(dest)) return { layer, item, status: 'skipped', detail: existsDetail };
+  if (dryRun) return { layer, item, status: 'dry-run' };
+  try {
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    if (transform) {
+      const text = await fs.readFile(src, 'utf8');
+      await fs.writeFile(dest, transform(text), { flag: 'wx' });
+    } else {
+      await fs.copyFile(src, dest, fsConstants.COPYFILE_EXCL);
+    }
+    return { layer, item, status: 'installed' };
+  } catch (e) {
+    if (e.code === 'EEXIST') return { layer, item, status: 'skipped', detail: existsDetail };
+    return { layer, item, status: 'failed', detail: e.message };
+  }
+}
+
+export async function installAgents(ctx) {
+  const results = [];
+  const destDir = path.join(ctx.projectDir, '.claude', 'agents');
+  for (const dir of ctx.profile.agentDirs) {
+    const srcDir = path.join(ctx.kitDir, dir);
+    const files = (await fs.readdir(srcDir)).filter((f) => f.endsWith('.md')).sort();
+    for (const f of files) {
+      results.push(
+        await copyNew({
+          layer: 'agents',
+          item: f,
+          src: path.join(srcDir, f),
+          dest: path.join(destDir, f),
+          dryRun: ctx.opts.dryRun,
+          existsDetail: 'agent exists, left untouched',
+        }),
+      );
+    }
+  }
+  return results;
+}
+
+export async function installRules(ctx) {
+  const results = [];
+  const mergeNote = 'exists, left untouched: merge the kit rules by hand';
+  for (const f of ['AGENTS.md', 'CLAUDE.md']) {
+    const transform =
+      f === 'AGENTS.md' && ctx.profile.name === 'core' ? (t) => stripProfileBlock(t, 'web') : undefined;
+    results.push(
+      await copyNew({
+        layer: 'rules',
+        item: f,
+        src: path.join(ctx.kitDir, 'templates', f),
+        dest: path.join(ctx.projectDir, f),
+        dryRun: ctx.opts.dryRun,
+        transform,
+        existsDetail: mergeNote,
+      }),
+    );
+  }
+  return results;
 }
 
 export async function main() {
