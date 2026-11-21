@@ -6,7 +6,7 @@ The main agent plans and hands work to specialist agents. Each agent picks the s
 
 ## Requirements
 - Node 22.20.0 or newer
-- `git` and the `claude` CLI on your PATH
+- `git` on your PATH, and the `claude` CLI if you use Claude Code (the default tool)
 - Internet (skills and MCP servers come from GitHub and npm)
 
 ## Install
@@ -34,6 +34,8 @@ From a clone, run `node path/to/kit/install.mjs` with the same flags.
 The script asks once before installing from third-party sources and lists each one. Without a terminal, pass `--yes`.
 
 ## What it installs
+This table is for Claude Code. For Codex, Cursor, Gemini CLI, and Copilot (`--tool`), see "Works with" in the [root README](../README.md#works-with) for where each layer is written.
+
 | Layer | Where | Source |
 |---|---|---|
 | Agents | `.claude/agents/` | `kit/agents/core` (+ `kit/agents/web`) |
