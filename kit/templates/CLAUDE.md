@@ -2,4 +2,4 @@
 
 ## Claude Code
 - Project agents go in `.claude/agents/`. User-level agents in `~/.claude/agents/` also apply.
-- Git, commit, and language rules come from the user-level `~/.claude/CLAUDE.md`. Do not repeat them here.
+- Git and commit rules are in `AGENTS.md`. Reply language: agents follow the language the user writes in.

@@ -82,3 +82,12 @@ test('kit.json lists explicit skill names, never "*"', async () => {
   await fs.writeFile(path.join(dir, 'kit.json'), JSON.stringify({ version: 1, profiles: { core: { skills: [{ repo: 'a/b', skills: '*' }] } } }));
   await assert.rejects(loadManifest(dir), /must be a list/);
 });
+
+test('templates carry the git rules themselves and do not lean on a personal global file', async () => {
+  const agents = await fs.readFile(path.join(kitDir, 'templates/AGENTS.md'), 'utf8');
+  assert.match(agents, /^## Git$/m);
+  assert.match(agents, /Never commit directly to `main` or `master`/);
+  assert.match(agents, /Conventional Commits/);
+  const claude = await fs.readFile(path.join(kitDir, 'templates/CLAUDE.md'), 'utf8');
+  assert.ok(!claude.includes('~/.claude/CLAUDE.md'));
+});

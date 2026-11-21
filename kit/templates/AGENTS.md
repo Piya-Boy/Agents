@@ -44,6 +44,12 @@ AI training data can be older than the versions this project uses (for example, 
 - Skip only for code that uses no library, or when `researcher` already covered the same library and version in this session.
 - Record the key versions under "Stack and key versions" above, so the check is quick.
 
+## Git
+- Never commit directly to `main` or `master`. Work on a branch named `feat/...`, `fix/...`, `refactor/...`, `docs/...`, or `chore/...`.
+- Commit only when the user asks. Keep each commit small and focused, with a Conventional Commits message (`type: message`). Suggest the branch name, commit message, and PR title.
+- Before committing: review the diff, remove debug code, and run format, lint, and tests if the project has them.
+- Never commit secrets or generated files. Never push, tag, or force-push without the user's say-so.
+
 ## Skills
 - Agents read the list of available skills and invoke the ones that match the task. Hints in each agent file are not binding.
 - The main agent does the same before planning or starting work.
