@@ -80,7 +80,7 @@ function isEntryPoint() {
   }
 }
 
-export const LAYERS = ['agents', 'rules', 'skills', 'mcp', 'plugins'];
+export const LAYERS = ['agents', 'rules', 'skills', 'mcp', 'plugins', 'hooks'];
 
 export function parseArgs(argv) {
   const o = {
@@ -88,6 +88,7 @@ export function parseArgs(argv) {
     dryRun: false,
     yes: false,
     skipUser: false,
+    autoCheck: false,
     only: null,
     projectDir: process.cwd(),
   };
@@ -99,6 +100,7 @@ export function parseArgs(argv) {
     } else if (a === '--dry-run') o.dryRun = true;
     else if (a === '--yes') o.yes = true;
     else if (a === '--skip-user') o.skipUser = true;
+    else if (a === '--auto-check') o.autoCheck = true;
     else if (a === '--only') {
       const names = String(argv[++i] ?? '').split(',').filter(Boolean);
       for (const n of names) if (!LAYERS.includes(n)) throw new Error(`--only: unknown layer ${n}`);
@@ -416,6 +418,62 @@ export async function installMcp(ctx) {
   return results;
 }
 
+const AUTO_CHECK_SCRIPT = 'check-skills.mjs';
+
+function autoCheckCommand(cli) {
+  return `node "$CLAUDE_PROJECT_DIR/.claude/hooks/${AUTO_CHECK_SCRIPT}" ${cli}`;
+}
+
+// Opt-in (--auto-check): a SessionStart hook that only tells the user when skills have updates.
+export async function installAutoCheck(ctx) {
+  const dryRun = ctx.opts.dryRun;
+  const results = [];
+  results.push(
+    await copyNew({
+      layer: 'hooks',
+      item: AUTO_CHECK_SCRIPT,
+      src: path.join(ctx.kitDir, 'hooks', AUTO_CHECK_SCRIPT),
+      dest: path.join(ctx.projectDir, '.claude', 'hooks', AUTO_CHECK_SCRIPT),
+      dryRun,
+    }),
+  );
+  const item = 'settings.json (SessionStart hook)';
+  const file = path.join(ctx.projectDir, '.claude', 'settings.json');
+  let settings = {};
+  try {
+    settings = JSON.parse(stripBom(await fs.readFile(file, 'utf8')));
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new Error('not an object');
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      results.push({ layer: 'hooks', item, status: 'failed', detail: '.claude/settings.json is not valid JSON; left untouched' });
+      return results;
+    }
+    settings = {};
+  }
+  const existing = (settings.hooks?.SessionStart || []).flatMap((e) => e.hooks || []);
+  if (existing.some((h) => typeof h.command === 'string' && h.command.includes(AUTO_CHECK_SCRIPT))) {
+    results.push({ layer: 'hooks', item, status: 'skipped', detail: 'hook already present' });
+    return results;
+  }
+  if (dryRun) {
+    results.push({ layer: 'hooks', item, status: 'dry-run' });
+    return results;
+  }
+  try {
+    settings.hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
+    settings.hooks.SessionStart = [
+      ...(settings.hooks.SessionStart || []),
+      { matcher: 'startup', hooks: [{ type: 'command', command: autoCheckCommand(ctx.manifest.skillsCli), timeout: 90 }] },
+    ];
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, JSON.stringify(settings, null, 2) + String.fromCharCode(10));
+    results.push({ layer: 'hooks', item, status: 'installed' });
+  } catch (e) {
+    results.push({ layer: 'hooks', item, status: 'failed', detail: e.message });
+  }
+  return results;
+}
+
 export async function installPlugins(ctx) {
   const names = ctx.profile.plugins;
   if (!names.length) return [];
@@ -551,6 +609,7 @@ export async function main(argv, deps = {}) {
     if (selected('rules')) results.push(...(await installRules(ctx)));
     if (selected('skills')) results.push(...(await installSkills(ctx)));
     if (selected('mcp')) results.push(...(await installMcp(ctx)));
+    if (opts.autoCheck || opts.only?.has('hooks')) results.push(...(await installAutoCheck(ctx)));
     if (selected('plugins') && profile.plugins.length) {
       if (opts.skipUser) {
         results.push(...profile.plugins.map((item) => ({ layer: 'plugins', item, status: 'skipped', detail: '--skip-user' })));

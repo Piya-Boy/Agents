@@ -23,7 +23,8 @@ node path/to/kit/install.mjs --profile web,superpowers
 | `--dry-run` | Print every action, change nothing |
 | `--yes` | Skip the confirmation prompts |
 | `--skip-user` | Do not install plugins (they change your whole machine, not just the project) |
-| `--only agents,rules,skills,mcp,plugins` | Run only these layers |
+| `--only agents,rules,skills,mcp,plugins,hooks` | Run only these layers |
+| `--auto-check` | Opt in: add a project `SessionStart` hook that tells you when installed skills have updates. It only reports; run `npx skills update -p -y` yourself after reviewing |
 
 The script asks once before installing from third-party sources and lists each one. Without a terminal, pass `--yes`.
 
@@ -54,7 +55,7 @@ The script itself never writes to `~/.claude/` and installs no hooks. The one ex
 - Plugin install says it needs a terminal: run the script again in a normal terminal. Claude shows its own approval prompt for plugins.
 
 ## Not installed
-Hooks, such as the `suggest-compact.js` hook that goes with the `strategic-compact` skill, because they edit `~/.claude/settings.json`.
+User-level hooks, such as the `suggest-compact.js` hook that goes with the `strategic-compact` skill, because they edit `~/.claude/settings.json`. The opt-in `--auto-check` hook is project-level (`.claude/settings.json`) and only reports skill updates.
 
 ## Develop
 ```bash
