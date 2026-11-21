@@ -47,6 +47,7 @@ AI training data can be older than the versions this project uses (for example, 
 ## Skills
 - Agents read the list of available skills and invoke the ones that match the task. Hints in each agent file are not binding.
 - The main agent does the same before planning or starting work.
+- The main agent also uses `context-engineering` when starting a session, switching tasks, or when answers get worse, and `strategic-compact` at the end of a phase to decide whether to run `/compact`.
 
 ## Rules for delegation
 - Give each agent a self-contained brief: goal, files or area, what done looks like.
