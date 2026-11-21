@@ -28,12 +28,15 @@ Your own preferences (tone, editor habits, tools the kit does not install) belon
 
 Requirements: Node 22.20.0 or newer, `git`, and the `claude` CLI on your PATH.
 
+Run from the root of your project, no clone needed:
+
 ```bash
-git clone https://github.com/Piya-Boy/Agents.git
-cd path/to/your-project
-node path/to/Agents/kit/install.mjs --dry-run   # print every action, change nothing
-node path/to/Agents/kit/install.mjs             # install the core profile
+npx github:Piya-Boy/Agents --dry-run                 # print every action, change nothing
+npx github:Piya-Boy/Agents                           # install the core profile
+npx github:Piya-Boy/Agents --profile web,superpowers # add the web agents and the superpowers plugin
 ```
+
+Working from a clone instead: `node path/to/Agents/kit/install.mjs [flags]`.
 
 Then restart Claude Code, approve the project MCP servers when asked, and fill the `TODO` lines in the generated `AGENTS.md` (stack, versions, commands).
 
