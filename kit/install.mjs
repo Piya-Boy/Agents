@@ -90,6 +90,31 @@ const TOOL_ALIASES = { agy: 'antigravity' };
 
 const toolsOf = (ctx) => ctx.opts?.tools ?? ['claude'];
 
+// Project files that show a tool is already in use. Looks in the project only, never in $HOME.
+// `.agents/skills` is left out on purpose: every non-Claude tool gets its skills there.
+const TOOL_MARKERS = {
+  claude: ['.claude', 'CLAUDE.md'],
+  codex: ['.codex'],
+  cursor: ['.cursor', '.cursorrules'],
+  gemini: ['.gemini', 'GEMINI.md'],
+  copilot: ['.github/copilot-instructions.md', '.github/agents'],
+  antigravity: ['.agents/agents', '.agents/mcp_config.json', '.agents/rules', '.agents/workflows'],
+};
+
+// Tools whose marker exists in projectDir, in TOOLS order. Falls back to ['claude'] when none.
+export async function detectTools(projectDir) {
+  const found = [];
+  for (const tool of TOOLS) {
+    for (const rel of TOOL_MARKERS[tool]) {
+      if (await pathExists(path.join(projectDir, ...rel.split('/')))) {
+        found.push(tool);
+        break;
+      }
+    }
+  }
+  return found.length ? found : ['claude'];
+}
+
 export function parseArgs(argv) {
   const o = {
     profiles: ['core'],
@@ -100,6 +125,7 @@ export function parseArgs(argv) {
     mergeRules: false,
     forceMcp: false,
     tools: ['claude'],
+    autoTool: false,
     only: null,
     projectDir: process.cwd(),
   };
@@ -116,9 +142,11 @@ export function parseArgs(argv) {
     else if (a === '--force-mcp') o.forceMcp = true;
     else if (a === '--tool') {
       const names = String(argv[++i] ?? '').split(',').map((n) => n.trim()).filter(Boolean).map((n) => TOOL_ALIASES[n] ?? n);
-      if (!names.length) throw new Error(`--tool needs a name (${TOOLS.join(', ')}, or all)`);
-      for (const n of names) if (n !== 'all' && !TOOLS.includes(n)) throw new Error(`--tool: unknown tool ${n} (use ${TOOLS.join(', ')}, agy, or all)`);
+      if (!names.length) throw new Error(`--tool needs a name (${TOOLS.join(', ')}, all, or auto)`);
+      for (const n of names) if (n !== 'all' && n !== 'auto' && !TOOLS.includes(n)) throw new Error(`--tool: unknown tool ${n} (use ${TOOLS.join(', ')}, agy, all, or auto)`);
       o.tools = names.includes('all') ? [...TOOLS] : TOOLS.filter((t) => names.includes(t));
+      // `auto` is resolved in main(), where the project directory is final.
+      o.autoTool = names.includes('auto') && !names.includes('all');
     }
     else if (a === '--only') {
       const names = String(argv[++i] ?? '').split(',').filter(Boolean);
@@ -717,6 +745,11 @@ export async function main(argv, deps = {}) {
   try {
     const opts = parseArgs(argv);
     if (deps.projectDir) opts.projectDir = deps.projectDir;
+    if (opts.autoTool) {
+      const detected = await detectTools(opts.projectDir);
+      opts.tools = TOOLS.filter((t) => detected.includes(t) || opts.tools.includes(t));
+      log(`Detected tools: ${opts.tools.join(', ')} (from files in this project)`);
+    }
     const kitDir = deps.kitDir ?? path.dirname(fileURLToPath(import.meta.url));
     const cmdEnv = deps.cmdEnv ?? defaultEnv();
     const env = deps.env ?? { nodeVersion: process.versions.node, resolve: (n) => resolveCommand(n, cmdEnv) };

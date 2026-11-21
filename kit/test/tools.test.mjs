@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs, preflight, formatSummary, installRules, installSkills, main, loadManifest, resolveProfiles, TOOLS } from '../install.mjs';
+import { parseArgs, detectTools, preflight, formatSummary, installRules, installSkills, main, loadManifest, resolveProfiles, TOOLS } from '../install.mjs';
 import { makeTempProject, fakeRunner } from './helpers.mjs';
 
 const kitDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -248,4 +248,66 @@ test('formatSummary mentions the Antigravity MCP approval, only for Antigravity'
   const rows = [{ layer: 'rules', item: 'AGENTS.md', status: 'installed' }];
   assert.match(formatSummary(rows, ['antigravity']), /1\. Antigravity asks before each MCP tool call/);
   assert.ok(!/Antigravity/.test(formatSummary(rows, ['codex'])));
+});
+
+test('parseArgs --tool auto: flagged for main, mixes with names, all wins', () => {
+  assert.equal(parseArgs([]).autoTool, false);
+  const a = parseArgs(['--tool', 'auto']);
+  assert.equal(a.autoTool, true);
+  assert.deepEqual(a.tools, []);
+  assert.deepEqual(parseArgs(['--tool', 'auto,gemini']).tools, ['gemini']);
+  assert.equal(parseArgs(['--tool', 'auto,all']).autoTool, false);
+  assert.deepEqual(parseArgs(['--tool', 'auto,all']).tools, TOOLS);
+});
+
+const mk = async (dir, rel, file = false) => {
+  const p = path.join(dir, ...rel.split('/'));
+  if (file) {
+    await fs.mkdir(path.dirname(p), { recursive: true });
+    await fs.writeFile(p, 'x');
+  } else await fs.mkdir(p, { recursive: true });
+};
+
+test('detectTools: empty project falls back to claude', async () => {
+  assert.deepEqual(await detectTools(await makeTempProject()), ['claude']);
+});
+
+test('detectTools: reads each tool marker, in TOOLS order', async () => {
+  const dir = await makeTempProject();
+  await mk(dir, '.codex');
+  await mk(dir, '.cursorrules', true);
+  await mk(dir, 'GEMINI.md', true);
+  await mk(dir, '.github/copilot-instructions.md', true);
+  await mk(dir, '.agents/mcp_config.json', true);
+  await mk(dir, 'CLAUDE.md', true);
+  assert.deepEqual(await detectTools(dir), TOOLS);
+});
+
+test('detectTools: .agents/skills alone does not mean Antigravity', async () => {
+  const dir = await makeTempProject();
+  await mk(dir, '.codex');
+  await mk(dir, '.agents/skills/x/SKILL.md', true);
+  assert.deepEqual(await detectTools(dir), ['codex']);
+});
+
+test('main --tool auto: installs for the detected tool only, no claude CLI needed', async () => {
+  const dir = await makeTempProject();
+  await mk(dir, '.codex');
+  const logs = [];
+  const f = fakeRunner();
+  const code = await main(['--tool', 'auto', '--only', 'rules', '--yes'], { projectDir: dir, env: noClaudeEnv, log: (l) => logs.push(l), isTTY: false, run: f.run });
+  assert.equal(code, 0);
+  assert.ok(logs.some((l) => /Detected tools: codex/.test(l)));
+  assert.equal(f.calls.length, 0);
+  assert.equal(await fs.access(path.join(dir, 'AGENTS.md')).then(() => true, () => false), true);
+  assert.equal(await fs.access(path.join(dir, 'CLAUDE.md')).then(() => true, () => false), false);
+});
+
+test('main --tool auto: nothing detected behaves like the default (claude)', async () => {
+  const dir = await makeTempProject();
+  const logs = [];
+  const code = await main(['--tool', 'auto', '--only', 'rules'], { projectDir: dir, env: noClaudeEnv, log: (l) => logs.push(l), isTTY: false, run: fakeRunner().run });
+  assert.equal(code, 1);
+  assert.ok(logs.some((l) => /Detected tools: claude/.test(l)));
+  assert.ok(logs.some((l) => /claude/i.test(l) && /error/.test(l)));
 });
