@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { readMcpJson, installMcp } from '../install.mjs';
+import { readMcpJson, installMcp, parseArgs } from '../install.mjs';
 import { makeTempProject, fakeRunner } from './helpers.mjs';
 
 const manifest = {
@@ -12,13 +12,13 @@ const manifest = {
   },
 };
 
-const ctx = (dir, run, mcp, dryRun = false) => ({
+const ctx = (dir, run, mcp, dryRun = false, extra = {}) => ({
   kitDir: '',
   projectDir: dir,
   manifest,
   profile: { name: 'core', agentDirs: [], skills: [], bundledSkills: [], mcp, plugins: [] },
   run,
-  opts: { dryRun },
+  opts: { dryRun, ...extra },
   log() {},
 });
 
@@ -68,6 +68,45 @@ test('covered by plugin: skipped with detail', async () => {
   assert.equal(res[0].status, 'skipped');
   assert.match(res[0].detail, /covered by plugin context7@claude-plugins-official/);
   assert.ok(!f.calls.some((c) => c.args[0] === 'mcp'));
+});
+
+test('parseArgs --force-mcp', () => {
+  assert.equal(parseArgs([]).forceMcp, false);
+  assert.equal(parseArgs(['--force-mcp']).forceMcp, true);
+});
+
+test('covered by plugin: skip detail names --force-mcp', async () => {
+  const dir = await makeTempProject();
+  const f = fakeRunner(() => ({ stdout: '[{"id":"context7@claude-plugins-official"}]' }));
+  const res = await installMcp(ctx(dir, f.run, ['context7']));
+  assert.match(res[0].detail, /--force-mcp/);
+});
+
+test('--force-mcp adds a server that a plugin already provides', async () => {
+  const dir = await makeTempProject();
+  const f = fakeRunner((cmd, args) => (args[0] === 'plugin' ? { stdout: '[{"id":"context7@claude-plugins-official"}]' } : {}));
+  const res = await installMcp(ctx(dir, f.run, ['context7'], false, { forceMcp: true }));
+  assert.equal(res[0].status, 'installed');
+  assert.match(res[0].detail, /plugin context7@claude-plugins-official also provides it/);
+  assert.deepEqual(f.calls.find((c) => c.args[0] === 'mcp').args.slice(-3), ['npx', '-y', '@upstash/context7-mcp']);
+});
+
+test('--force-mcp still skips what .mcp.json already has', async () => {
+  const dir = await makeTempProject();
+  await fs.writeFile(path.join(dir, '.mcp.json'), JSON.stringify({ mcpServers: { context7: {} } }));
+  const f = fakeRunner(() => ({ stdout: '[{"id":"context7@claude-plugins-official"}]' }));
+  const res = await installMcp(ctx(dir, f.run, ['context7'], false, { forceMcp: true }));
+  assert.equal(res[0].status, 'skipped');
+  assert.match(res[0].detail, /already in \.mcp\.json/);
+  assert.ok(!f.calls.some((c) => c.args[0] === 'mcp'));
+});
+
+test('--force-mcp with no plugin behaves as before and adds no detail', async () => {
+  const dir = await makeTempProject();
+  const f = fakeRunner(() => ({ stdout: '[]' }));
+  const res = await installMcp(ctx(dir, f.run, ['context7'], false, { forceMcp: true }));
+  assert.equal(res[0].status, 'installed');
+  assert.equal(res[0].detail, undefined);
 });
 
 test('invalid .mcp.json: failed, file untouched, no add', async () => {

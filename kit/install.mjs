@@ -90,6 +90,7 @@ export function parseArgs(argv) {
     skipUser: false,
     autoCheck: false,
     mergeRules: false,
+    forceMcp: false,
     only: null,
     projectDir: process.cwd(),
   };
@@ -103,6 +104,7 @@ export function parseArgs(argv) {
     else if (a === '--skip-user') o.skipUser = true;
     else if (a === '--auto-check') o.autoCheck = true;
     else if (a === '--merge-rules') o.mergeRules = true;
+    else if (a === '--force-mcp') o.forceMcp = true;
     else if (a === '--only') {
       const names = String(argv[++i] ?? '').split(',').filter(Boolean);
       for (const n of names) if (!LAYERS.includes(n)) throw new Error(`--only: unknown layer ${n}`);
@@ -439,8 +441,8 @@ export async function installMcp(ctx) {
       continue;
     }
     const covering = def.coveredByPlugin && pluginIds.find((id) => id.startsWith(def.coveredByPlugin));
-    if (covering) {
-      results.push({ layer: 'mcp', item, status: 'skipped', detail: `covered by plugin ${covering}` });
+    if (covering && !ctx.opts.forceMcp) {
+      results.push({ layer: 'mcp', item, status: 'skipped', detail: `covered by plugin ${covering}; use --force-mcp to add it anyway` });
       continue;
     }
     const r = await ctx.run(
@@ -450,7 +452,7 @@ export async function installMcp(ctx) {
     );
     results.push(
       r.code === 0
-        ? { layer: 'mcp', item, status: ctx.opts.dryRun ? 'dry-run' : 'installed' }
+        ? { layer: 'mcp', item, status: ctx.opts.dryRun ? 'dry-run' : 'installed', ...(covering ? { detail: `plugin ${covering} also provides it` } : {}) }
         : { layer: 'mcp', item, status: 'failed', detail: lastLine(r.stderr) },
     );
   }

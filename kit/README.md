@@ -27,6 +27,7 @@ From a clone, run `node path/to/kit/install.mjs` with the same flags.
 | `--skip-user` | Do not install plugins (they change your whole machine, not just the project) |
 | `--only agents,rules,skills,mcp,plugins,hooks` | Run only these layers |
 | `--merge-rules` | If `AGENTS.md` already exists, add the kit rules at its end between `<!-- agent-kit:start -->` and `<!-- agent-kit:end -->`. Existing text is not changed, and a re-run adds nothing twice. The kit's headings may repeat yours; merge them by hand afterwards |
+| `--force-mcp` | Add the MCP servers to `.mcp.json` even when an installed plugin already provides them. You then have two copies of those tools |
 | `--auto-check` | Opt in: add a project `SessionStart` hook that tells you when installed skills have updates. It only reports; run `npx skills update -p -y` yourself after reviewing |
 
 The script asks once before installing from third-party sources and lists each one. Without a terminal, pass `--yes`.
@@ -43,7 +44,7 @@ The script asks once before installing from third-party sources and lists each o
 What to install is data in `kit/kit.json`. To add a skill, MCP server, or plugin, edit that file. List skills by name: the skills CLI overwrites an existing skill of the same name, so the kit checks each name first and does not support `"*"`.
 
 ## Safe to re-run
-The script skips what already exists and never overwrites your `AGENTS.md`, `CLAUDE.md`, agents, skills, or `.mcp.json` entries. If `AGENTS.md` already exists, merge the kit's rules by hand, or pass `--merge-rules` to add them at the end of the file. An MCP server that an installed plugin already provides (for example `context7`) is skipped.
+The script skips what already exists and never overwrites your `AGENTS.md`, `CLAUDE.md`, agents, skills, or `.mcp.json` entries. If `AGENTS.md` already exists, merge the kit's rules by hand, or pass `--merge-rules` to add them at the end of the file. An MCP server that an installed plugin already provides (for example `context7`) is skipped, unless you pass `--force-mcp`.
 
 The script itself never writes to `~/.claude/` and installs no hooks. The one exception is the plugin layer: `claude plugin install --scope user` makes Claude add the plugin to `~/.claude/settings.json` (`enabledPlugins`, `extraKnownMarketplaces`). Use `--skip-user` to avoid that.
 
