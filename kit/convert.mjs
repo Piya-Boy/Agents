@@ -7,6 +7,7 @@
 //   cursor   .cursor/agents/<name>.md           Markdown; `readonly` instead of `tools`; also reads .claude/agents
 //   gemini   .gemini/agents/<name>.md           Markdown; tool names differ from Claude's, so no `tools`
 //   copilot  .github/agents/<name>.agent.md     Markdown; accepts Claude tool names as aliases
+//   antigravity  .agents/agents/<name>.md       Markdown; `tools` defaults to none, so it must be listed, in its own tool names
 
 export function parseAgent(text) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
@@ -52,6 +53,20 @@ export function copilotTools(agent) {
     if (alias && !out.includes(alias)) out.push(alias);
   }
   return out.length ? out : null;
+}
+
+// Antigravity tool names. Only these four appear in its docs; the full catalog is not published,
+// and a wrong name can hang the agent, so nothing else is mapped. No equivalent for Glob or Skill.
+const AGY_READ = ['view_file', 'grep_search'];
+const AGY_ALL = ['view_file', 'grep_search', 'run_command', 'replace_file_content'];
+const AGY_ALIAS = { Read: 'view_file', Grep: 'grep_search', Bash: 'run_command', Edit: 'replace_file_content', Write: 'replace_file_content', MultiEdit: 'replace_file_content' };
+
+// `tools` defaults to none in Antigravity, so an agent with no tools could do nothing.
+export function antigravityTools(agent) {
+  if (!agent.tools) return [...AGY_ALL];
+  const out = [];
+  for (const t of agent.tools) if (AGY_ALIAS[t] && !out.includes(AGY_ALIAS[t])) out.push(AGY_ALIAS[t]);
+  return out.length ? out : isReadOnly(agent) ? [...AGY_READ] : [...AGY_ALL];
 }
 
 // A YAML/TOML-safe single-line string. JSON string syntax is valid in both.
@@ -105,6 +120,14 @@ export function convertAgent(tool, agent) {
         ),
       };
     }
+    case 'antigravity':
+      return {
+        path: `.agents/agents/${agent.name}.md`,
+        content: mdAgent(
+          { name: agent.name, description: q(agent.description), model: 'inherit', tools: `[${antigravityTools(agent).map(q).join(', ')}]` },
+          note + body,
+        ),
+      };
     default:
       return null;
   }

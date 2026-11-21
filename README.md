@@ -1,6 +1,6 @@
 # Agents
 
-A reusable agent kit for [Claude Code](https://claude.com/claude-code), Codex CLI, Cursor, Gemini CLI, and GitHub Copilot. The main agent plans and hands work to specialist sub-agents. Each sub-agent picks the skills it needs on demand, checks current docs for the library versions your project uses, and replies in the language you write in.
+A reusable agent kit for [Claude Code](https://claude.com/claude-code), Codex CLI, Cursor, Gemini CLI, Google Antigravity (`agy`), and GitHub Copilot. The main agent plans and hands work to specialist sub-agents. Each sub-agent picks the skills it needs on demand, checks current docs for the library versions your project uses, and replies in the language you write in.
 
 One Node script installs the whole kit into a project.
 
@@ -46,17 +46,18 @@ Using another tool? Add `--tool`, for example `npx github:Piya-Boy/Agents --tool
 
 Pick the tools with `--tool` (default `claude`). Each tool gets its files in the place and format it reads.
 
-| Layer | Claude Code | Codex CLI | Cursor | Gemini CLI | GitHub Copilot |
-|---|---|---|---|---|---|
-| Rules | `AGENTS.md` + `CLAUDE.md` | `AGENTS.md` | `AGENTS.md` | `AGENTS.md` + `GEMINI.md` | `AGENTS.md` |
-| Skills | `.claude/skills/` | `.agents/skills/` | `.agents/skills/` | `.agents/skills/` | `.agents/skills/` |
-| Agents | `.claude/agents/*.md` | `.codex/agents/*.toml` | `.cursor/agents/*.md` (skipped when Claude is also selected: Cursor reads `.claude/agents`) | `.gemini/agents/*.md` | `.github/agents/*.agent.md` |
-| MCP servers | `.mcp.json` | `.codex/config.toml` | `.cursor/mcp.json` | `.gemini/settings.json` | `.mcp.json` |
-| Plugins, hooks | yes | no | no | no | no |
+| Layer | Claude Code | Codex CLI | Cursor | Gemini CLI | GitHub Copilot | Antigravity (`agy`) |
+|---|---|---|---|---|---|---|
+| Rules | `AGENTS.md` + `CLAUDE.md` | `AGENTS.md` | `AGENTS.md` | `AGENTS.md` + `GEMINI.md` | `AGENTS.md` | `AGENTS.md` |
+| Skills | `.claude/skills/` | `.agents/skills/` | `.agents/skills/` | `.agents/skills/` | `.agents/skills/` | `.agents/skills/` |
+| Agents | `.claude/agents/*.md` | `.codex/agents/*.toml` | `.cursor/agents/*.md` (skipped when Claude is also selected: Cursor reads `.claude/agents`) | `.gemini/agents/*.md` | `.github/agents/*.agent.md` | `.agents/agents/*.md` |
+| MCP servers | `.mcp.json` | `.codex/config.toml` | `.cursor/mcp.json` | `.gemini/settings.json` | `.mcp.json` | `.agents/mcp_config.json` |
+| Plugins, hooks | yes | no | no | no | no | no |
 
 What to know:
 - **Read-only agents.** `architect`, `reviewer`, `researcher`, `security`, and `security-auditor` are limited to read tools in Claude Code. Only Copilot can express that limit (when every tool maps to a Copilot tool). For the others the agent file says "this agent is read-only" in words. That is an instruction, not enforcement.
 - **Models.** The per-agent `model` is dropped for the other tools, which use their own default.
+- **Antigravity.** It is Google's replacement for Gemini CLI (`agy`); Gemini CLI now serves mainly enterprise and paid-API users, so `--tool gemini` stays for them. Antigravity reads `AGENTS.md` and `.agents/skills/` but not `.gemini/agents/` or `.gemini/settings.json`, so it has its own files. Its agents get no tools unless you list them, so the kit lists the four tool names its docs name (`view_file`, `grep_search`, `run_command`, `replace_file_content`). The full tool list is not published, so agents that use other tools (web search, MCP) lose them. `--tool agy` is accepted as a short name.
 - **Trust.** Codex reads `.codex/config.toml` only in a project you marked as trusted, and Gemini CLI reads `.gemini/settings.json` only in a trusted folder.
 - **Formats change.** The file formats were checked against each tool's official docs on 2026-11-21. They live in `kit/convert.mjs` (agents) and `kit/mcp-config.mjs` (MCP). The files were generated and tested, but not opened in the real tools.
 - `--tool claude` is the default, so nothing changes for existing Claude Code users.
@@ -105,6 +106,7 @@ Run all of these from your project root. Working from a clone? Replace `npx gith
 | Set up Cursor | `npx github:Piya-Boy/Agents --tool cursor` |
 | Set up Gemini CLI | `npx github:Piya-Boy/Agents --tool gemini` |
 | Set up GitHub Copilot | `npx github:Piya-Boy/Agents --tool copilot` |
+| Set up Antigravity | `npx github:Piya-Boy/Agents --tool agy` |
 | Set up several tools at once | `npx github:Piya-Boy/Agents --tool claude,codex` (or `--tool all`) |
 | Add the web agents, Chrome DevTools MCP, and `ui-ux-pro-max` | `npx github:Piya-Boy/Agents --profile web` |
 | Web plus the `superpowers` plugin | `npx github:Piya-Boy/Agents --profile web,superpowers` |
@@ -124,7 +126,7 @@ Run all of these from your project root. Working from a clone? Replace `npx gith
 |---|---|
 | `--profile NAME[,NAME]` | Profiles to install: `core` (default, always included), `web`, `superpowers`, or `all` for every profile |
 | `--dry-run` | Print every action, change nothing |
-| `--tool NAME[,NAME]` | Tools to set up: `claude` (default), `codex`, `cursor`, `gemini`, `copilot`, or `all`. For the non-Claude tools it writes the rules (`AGENTS.md`, plus `GEMINI.md` for Gemini), the skills (`.agents/skills/`, which all four read), the agents (`.codex/agents/*.toml`, `.cursor/agents/`, `.gemini/agents/`, `.github/agents/*.agent.md`), and the MCP servers (`.codex/config.toml`, `.cursor/mcp.json`, `.gemini/settings.json`, `.mcp.json`). Plugins and hooks are Claude Code only and show as `skipped`. The `claude` CLI is needed only when `claude` is selected |
+| `--tool NAME[,NAME]` | Tools to set up: `claude` (default), `codex`, `cursor`, `gemini`, `copilot`, `antigravity` (or `agy`), or `all`. For the non-Claude tools it writes the rules (`AGENTS.md`, plus `GEMINI.md` for Gemini), the skills (`.agents/skills/`, which all four read), the agents (`.codex/agents/*.toml`, `.cursor/agents/`, `.gemini/agents/`, `.github/agents/*.agent.md`, `.agents/agents/`), and the MCP servers (`.codex/config.toml`, `.cursor/mcp.json`, `.gemini/settings.json`, `.mcp.json`, `.agents/mcp_config.json`). Plugins and hooks are Claude Code only and show as `skipped`. The `claude` CLI is needed only when `claude` is selected |
 | `--yes` | Skip the confirmation prompts |
 | `--skip-user` | Do not install plugins (they change your whole machine, not just the project) |
 | `--only LAYER[,LAYER]` | Run only these layers (see below) |
