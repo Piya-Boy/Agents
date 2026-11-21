@@ -78,9 +78,10 @@ Combine them: `--profile web,superpowers`.
 | `--yes` | Skip the confirmation prompts |
 | `--skip-user` | Do not install plugins (they change your whole machine, not just the project) |
 | `--only agents,rules,skills,mcp,plugins,hooks` | Run only these layers |
+| `--merge-rules` | If `AGENTS.md` already exists, add the kit rules at its end between `<!-- agent-kit:start -->` and `<!-- agent-kit:end -->`. Your text is not changed, and a re-run adds nothing twice |
 | `--auto-check` | Add a project hook that tells you when installed skills have updates. It only reports |
 
-The script is safe to re-run. It skips what already exists and never overwrites your `AGENTS.md`, `CLAUDE.md`, agents, skills, or `.mcp.json` entries.
+The script is safe to re-run. It skips what already exists and never overwrites your `AGENTS.md`, `CLAUDE.md`, agents, skills, or `.mcp.json` entries. With `--merge-rules` it only adds to the end of an existing `AGENTS.md`.
 
 Full reference, troubleshooting, and what lands where: [kit/README.md](kit/README.md).
 

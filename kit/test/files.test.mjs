@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadManifest, resolveProfile, installAgents, installRules, stripProfileBlock } from '../install.mjs';
+import { loadManifest, resolveProfile, installAgents, installRules, stripProfileBlock, parseArgs, RULES_START, RULES_END } from '../install.mjs';
 import { makeTempProject } from './helpers.mjs';
 
 const kitDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -75,6 +75,69 @@ test('installRules leaves existing AGENTS.md untouched and warns', async () => {
   assert.equal(a.status, 'skipped');
   assert.match(a.detail, /merge/);
   assert.equal(res.find((r) => r.item === 'CLAUDE.md').status, 'installed');
+});
+
+test('parseArgs --merge-rules', () => {
+  assert.equal(parseArgs([]).mergeRules, false);
+  assert.equal(parseArgs(['--merge-rules']).mergeRules, true);
+});
+
+test('installRules --merge-rules appends kit rules and keeps existing text', async () => {
+  const dir = await makeTempProject();
+  await fs.writeFile(path.join(dir, 'AGENTS.md'), '# Mine\n\nkeep this');
+  const res = await installRules(await ctxFor('core', dir, { mergeRules: true }));
+  const text = await fs.readFile(path.join(dir, 'AGENTS.md'), 'utf8');
+  assert.ok(text.startsWith('# Mine\n\nkeep this\n\n' + RULES_START));
+  assert.ok(text.trimEnd().endsWith(RULES_END));
+  assert.ok(text.includes('## Orchestration'));
+  assert.ok(!text.includes('profile:web'));
+  assert.equal((text.match(/^# /gm) || []).length, 1);
+  const a = res.find((r) => r.item === 'AGENTS.md');
+  assert.equal(a.status, 'installed');
+  assert.match(a.detail, /added/);
+});
+
+test('installRules --merge-rules is idempotent', async () => {
+  const dir = await makeTempProject();
+  await fs.writeFile(path.join(dir, 'AGENTS.md'), 'MINE\n');
+  await installRules(await ctxFor('core', dir, { mergeRules: true }));
+  const once = await fs.readFile(path.join(dir, 'AGENTS.md'), 'utf8');
+  const res = await installRules(await ctxFor('core', dir, { mergeRules: true }));
+  assert.equal(await fs.readFile(path.join(dir, 'AGENTS.md'), 'utf8'), once);
+  assert.equal(res.find((r) => r.item === 'AGENTS.md').status, 'skipped');
+});
+
+test('installRules --merge-rules dry-run writes nothing', async () => {
+  const dir = await makeTempProject();
+  await fs.writeFile(path.join(dir, 'AGENTS.md'), 'MINE');
+  const res = await installRules(await ctxFor('core', dir, { mergeRules: true, dryRun: true }));
+  assert.equal(await fs.readFile(path.join(dir, 'AGENTS.md'), 'utf8'), 'MINE');
+  assert.equal(res.find((r) => r.item === 'AGENTS.md').status, 'dry-run');
+});
+
+test('installRules --merge-rules keeps CRLF line endings and the web section for the web profile', async () => {
+  const dir = await makeTempProject();
+  await fs.writeFile(path.join(dir, 'AGENTS.md'), 'MINE\r\n');
+  await installRules(await ctxFor('web', dir, { mergeRules: true }));
+  const text = await fs.readFile(path.join(dir, 'AGENTS.md'), 'utf8');
+  assert.ok(text.startsWith('MINE\r\n\r\n' + RULES_START + '\r\n'));
+  assert.ok(!/\r\r/.test(text) && !/[^\r]\n/.test(text), 'every newline is a single CRLF');
+  assert.ok(text.includes('profile:web'));
+});
+
+test('installRules --merge-rules creates a missing AGENTS.md as before', async () => {
+  const dir = await makeTempProject();
+  const res = await installRules(await ctxFor('core', dir, { mergeRules: true }));
+  const text = await fs.readFile(path.join(dir, 'AGENTS.md'), 'utf8');
+  assert.ok(!text.includes(RULES_START));
+  assert.equal(res.find((r) => r.item === 'AGENTS.md').status, 'installed');
+});
+
+test('installRules without the flag points to --merge-rules', async () => {
+  const dir = await makeTempProject();
+  await fs.writeFile(path.join(dir, 'AGENTS.md'), 'MINE');
+  const res = await installRules(await ctxFor('core', dir));
+  assert.match(res.find((r) => r.item === 'AGENTS.md').detail, /--merge-rules/);
 });
 
 test('stripProfileBlock', () => {
