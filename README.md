@@ -98,7 +98,7 @@ Run all of these from your project root. Working from a clone? Replace `npx gith
 |---|---|
 | `--profile NAME[,NAME]` | Profiles to install: `core` (default, always included), `web`, `superpowers`, or `all` for every profile |
 | `--dry-run` | Print every action, change nothing |
-| `--tool NAME[,NAME]` | Tools to set up: `claude` (default), `codex`, `cursor`, `gemini`, `copilot`, or `all`. In progress: for the non-Claude tools the rules (`AGENTS.md`, plus `GEMINI.md` for Gemini), the skills (`.agents/skills/`, which all four read), and the agents (`.codex/agents/*.toml`, `.cursor/agents/`, `.gemini/agents/`, `.github/agents/*.agent.md`) are written so far. MCP servers for them come in a later release and show as `skipped` in the summary. The `claude` CLI is needed only when `claude` is selected |
+| `--tool NAME[,NAME]` | Tools to set up: `claude` (default), `codex`, `cursor`, `gemini`, `copilot`, or `all`. For the non-Claude tools it writes the rules (`AGENTS.md`, plus `GEMINI.md` for Gemini), the skills (`.agents/skills/`, which all four read), the agents (`.codex/agents/*.toml`, `.cursor/agents/`, `.gemini/agents/`, `.github/agents/*.agent.md`), and the MCP servers (`.codex/config.toml`, `.cursor/mcp.json`, `.gemini/settings.json`, `.mcp.json`). Plugins and hooks are Claude Code only and show as `skipped`. The `claude` CLI is needed only when `claude` is selected |
 | `--yes` | Skip the confirmation prompts |
 | `--skip-user` | Do not install plugins (they change your whole machine, not just the project) |
 | `--only LAYER[,LAYER]` | Run only these layers (see below) |

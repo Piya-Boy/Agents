@@ -9,6 +9,7 @@
   "files": [
     "kit/install.mjs",
     "kit/convert.mjs",
+    "kit/mcp-config.mjs",
     "kit/kit.json",
     "kit/README.md",
     "kit/agents",
