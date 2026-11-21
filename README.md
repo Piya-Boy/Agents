@@ -1,6 +1,6 @@
 # Agents
 
-A reusable agent kit for [Claude Code](https://claude.com/claude-code). The main agent plans and hands work to specialist sub-agents. Each sub-agent picks the skills it needs on demand, checks current docs for the library versions your project uses, and replies in the language you write in.
+A reusable agent kit for [Claude Code](https://claude.com/claude-code), Codex CLI, Cursor, Gemini CLI, and GitHub Copilot. The main agent plans and hands work to specialist sub-agents. Each sub-agent picks the skills it needs on demand, checks current docs for the library versions your project uses, and replies in the language you write in.
 
 One Node script installs the whole kit into a project.
 
@@ -38,7 +38,28 @@ npx github:Piya-Boy/Agents --profile web,superpowers # add the web agents and th
 
 Working from a clone instead: `node path/to/Agents/kit/install.mjs [flags]`.
 
-Then restart Claude Code, approve the project MCP servers when asked, and fill the `TODO` lines in the generated `AGENTS.md` (stack, versions, commands).
+Then restart your tool, approve the project MCP servers when asked, and fill the `TODO` lines in the generated `AGENTS.md` (stack, versions, commands).
+
+Using another tool? Add `--tool`, for example `npx github:Piya-Boy/Agents --tool codex` or `--tool all`. See [Works with](#works-with).
+
+## Works with
+
+Pick the tools with `--tool` (default `claude`). Each tool gets its files in the place and format it reads.
+
+| Layer | Claude Code | Codex CLI | Cursor | Gemini CLI | GitHub Copilot |
+|---|---|---|---|---|---|
+| Rules | `AGENTS.md` + `CLAUDE.md` | `AGENTS.md` | `AGENTS.md` | `AGENTS.md` + `GEMINI.md` | `AGENTS.md` |
+| Skills | `.claude/skills/` | `.agents/skills/` | `.agents/skills/` | `.agents/skills/` | `.agents/skills/` |
+| Agents | `.claude/agents/*.md` | `.codex/agents/*.toml` | `.cursor/agents/*.md` (skipped when Claude is also selected: Cursor reads `.claude/agents`) | `.gemini/agents/*.md` | `.github/agents/*.agent.md` |
+| MCP servers | `.mcp.json` | `.codex/config.toml` | `.cursor/mcp.json` | `.gemini/settings.json` | `.mcp.json` |
+| Plugins, hooks | yes | no | no | no | no |
+
+What to know:
+- **Read-only agents.** `architect`, `reviewer`, `researcher`, `security`, and `security-auditor` are limited to read tools in Claude Code. Only Copilot can express that limit (when every tool maps to a Copilot tool). For the others the agent file says "this agent is read-only" in words. That is an instruction, not enforcement.
+- **Models.** The per-agent `model` is dropped for the other tools, which use their own default.
+- **Trust.** Codex reads `.codex/config.toml` only in a project you marked as trusted, and Gemini CLI reads `.gemini/settings.json` only in a trusted folder.
+- **Formats change.** The file formats were checked against each tool's official docs on 2026-11-21. They live in `kit/convert.mjs` (agents) and `kit/mcp-config.mjs` (MCP). The files were generated and tested, but not opened in the real tools.
+- `--tool claude` is the default, so nothing changes for existing Claude Code users.
 
 ## Agents
 
@@ -80,6 +101,11 @@ Run all of these from your project root. Working from a clone? Replace `npx gith
 |---|---|
 | See what would happen, change nothing | `npx github:Piya-Boy/Agents --dry-run` |
 | Install the core profile | `npx github:Piya-Boy/Agents` |
+| Set up Codex CLI | `npx github:Piya-Boy/Agents --tool codex` |
+| Set up Cursor | `npx github:Piya-Boy/Agents --tool cursor` |
+| Set up Gemini CLI | `npx github:Piya-Boy/Agents --tool gemini` |
+| Set up GitHub Copilot | `npx github:Piya-Boy/Agents --tool copilot` |
+| Set up several tools at once | `npx github:Piya-Boy/Agents --tool claude,codex` (or `--tool all`) |
 | Add the web agents, Chrome DevTools MCP, and `ui-ux-pro-max` | `npx github:Piya-Boy/Agents --profile web` |
 | Web plus the `superpowers` plugin | `npx github:Piya-Boy/Agents --profile web,superpowers` |
 | Every profile (core, web, superpowers) | `npx github:Piya-Boy/Agents --profile all` |
@@ -89,7 +115,7 @@ Run all of these from your project root. Working from a clone? Replace `npx gith
 | Write MCP servers to `.mcp.json` even if a plugin provides them | `npx github:Piya-Boy/Agents --only mcp --force-mcp` |
 | Add only the web MCP server (Chrome DevTools) | `npx github:Piya-Boy/Agents --only mcp --profile web --force-mcp` |
 | Get a reminder when installed skills have updates | `npx github:Piya-Boy/Agents --only hooks` (or add `--auto-check` to a full install) |
-| Everything, including the opt-in extras | `npx github:Piya-Boy/Agents --profile all --merge-rules --force-mcp --auto-check` |
+| Everything, including the opt-in extras | `npx github:Piya-Boy/Agents --profile all --tool all --merge-rules --force-mcp --auto-check` |
 | Update installed skills later (after you review) | `npx skills update -p -y` |
 
 ### Flags
@@ -128,10 +154,12 @@ Full reference, troubleshooting, and what lands where: [kit/README.md](kit/READM
 ```
 kit/
   install.mjs        the installer (Node stdlib only)
+  convert.mjs        turns an agent file into each tool's format
+  mcp-config.mjs     writes MCP servers into each tool's config file
   kit.json           what each profile installs: skills, MCP servers, plugins
   agents/            agent files, core/ and web/
   skills/            skills bundled with the kit
-  templates/         AGENTS.md and CLAUDE.md copied into projects
+  templates/         AGENTS.md, CLAUDE.md, and GEMINI.md copied into projects
   hooks/             opt-in skill-update check
   test/              node:test suite
 docs/superpowers/    design specs and implementation plans
