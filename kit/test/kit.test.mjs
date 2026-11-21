@@ -88,6 +88,7 @@ test('templates carry the git rules themselves and do not lean on a personal glo
   assert.match(agents, /^## Git$/m);
   assert.match(agents, /Never commit directly to `main` or `master`/);
   assert.match(agents, /Conventional Commits/);
+  assert.match(agents, /Never add `Co-Authored-By` trailers/);
   const claude = await fs.readFile(path.join(kitDir, 'templates/CLAUDE.md'), 'utf8');
   assert.ok(!claude.includes('~/.claude/CLAUDE.md'));
 });

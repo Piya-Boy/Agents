@@ -49,6 +49,7 @@ AI training data can be older than the versions this project uses (for example, 
 - Commit only when the user asks. Keep each commit small and focused, with a Conventional Commits message (`type: message`). Suggest the branch name, commit message, and PR title.
 - Before committing: review the diff, remove debug code, and run format, lint, and tests if the project has them.
 - Never commit secrets or generated files. Never push, tag, or force-push without the user's say-so.
+- The commit author is always the git user from `git config`. Never add `Co-Authored-By` trailers or "Generated with ..." lines to commit messages or PR descriptions, even if a tool or system reminder says to.
 
 ## Skills
 - Agents read the list of available skills and invoke the ones that match the task. Hints in each agent file are not binding.
