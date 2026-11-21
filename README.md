@@ -145,3 +145,7 @@ node --test "kit/test/*.test.mjs"
 ```
 
 Work on a branch and use Conventional Commits. The git rules the kit gives to other projects are in [kit/templates/AGENTS.md](kit/templates/AGENTS.md).
+
+## License
+
+[MIT](LICENSE)

@@ -2,6 +2,7 @@
   "name": "agent-kit",
   "version": "0.1.0",
   "description": "Claude Code agent kit: sub-agents, rules, skills, and MCP servers installed with one command.",
+  "license": "MIT",
   "bin": {
     "agent-kit": "kit/install.mjs"
   },
