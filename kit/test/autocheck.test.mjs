@@ -17,8 +17,8 @@ const ctx = (dir, dryRun = false) => ({
   log() {},
 });
 const read = (dir, f) => fs.readFile(path.join(dir, f), 'utf8');
-const sessionStartCommands = (settings) =>
-  (settings.hooks?.SessionStart || []).flatMap((e) => e.hooks || []).map((h) => h.command);
+const sessionStartHooks = (settings) => (settings.hooks?.SessionStart || []).flatMap((e) => e.hooks || []);
+const isOurs = (h) => (h.args || []).some((a) => String(a).includes('check-skills.mjs'));
 
 test('parseArgs --auto-check and the hooks layer name', () => {
   assert.equal(parseArgs([]).autoCheck, false);
@@ -32,10 +32,13 @@ test('installs the script and a SessionStart hook into a fresh project', async (
   assert.ok(res.every((r) => r.layer === 'hooks' && r.status === 'installed'), JSON.stringify(res));
   await fs.access(path.join(dir, '.claude/hooks/check-skills.mjs'));
   const s = JSON.parse(await read(dir, '.claude/settings.json'));
-  const cmds = sessionStartCommands(s);
-  assert.equal(cmds.length, 1);
-  assert.match(cmds[0], /check-skills\.mjs/);
-  assert.match(cmds[0], /skills@1\.9\.0/);
+  const hooks = sessionStartHooks(s);
+  assert.equal(hooks.length, 1);
+  assert.equal(hooks[0].type, 'command');
+  assert.equal(hooks[0].command, 'node');
+  assert.deepEqual(hooks[0].args, ['${CLAUDE_PROJECT_DIR}/.claude/hooks/check-skills.mjs', 'skills@1.9.0']);
+  assert.equal(hooks[0].timeout, 30);
+  assert.equal(s.hooks.SessionStart[0].matcher, 'startup');
 });
 
 test('merges into existing settings and keeps everything else', async () => {
@@ -50,9 +53,9 @@ test('merges into existing settings and keeps everything else', async () => {
   const s = JSON.parse(await read(dir, '.claude/settings.json'));
   assert.deepEqual(s.permissions, existing.permissions);
   assert.deepEqual(s.hooks.Stop, existing.hooks.Stop);
-  const cmds = sessionStartCommands(s);
-  assert.ok(cmds.includes('echo mine'));
-  assert.equal(cmds.filter((c) => /check-skills\.mjs/.test(c)).length, 1);
+  const hooks = sessionStartHooks(s);
+  assert.ok(hooks.some((h) => h.command === 'echo mine'));
+  assert.equal(hooks.filter(isOurs).length, 1);
 });
 
 test('second run is a no-op', async () => {

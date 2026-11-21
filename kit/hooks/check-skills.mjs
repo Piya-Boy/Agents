@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const CHECK_TIMEOUT_MS = 60 * 1000;
+const CHECK_TIMEOUT_MS = 25 * 1000; // under the hook's own 30s timeout
 
 export function parseCheckOutput(text) {
   const clean = String(text || '').replace(/\u001b\[[0-9;?]*[A-Za-z]/g, '');

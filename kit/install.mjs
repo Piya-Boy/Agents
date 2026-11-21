@@ -420,8 +420,14 @@ export async function installMcp(ctx) {
 
 const AUTO_CHECK_SCRIPT = 'check-skills.mjs';
 
-function autoCheckCommand(cli) {
-  return `node "$CLAUDE_PROJECT_DIR/.claude/hooks/${AUTO_CHECK_SCRIPT}" ${cli}`;
+// Exec form (command + args): no shell, so it works the same on Windows, macOS, and Linux.
+function autoCheckHook(cli) {
+  return {
+    type: 'command',
+    command: 'node',
+    args: [`\${CLAUDE_PROJECT_DIR}/.claude/hooks/${AUTO_CHECK_SCRIPT}`, cli],
+    timeout: 30,
+  };
 }
 
 // Opt-in (--auto-check): a SessionStart hook that only tells the user when skills have updates.
@@ -451,7 +457,10 @@ export async function installAutoCheck(ctx) {
     settings = {};
   }
   const existing = (settings.hooks?.SessionStart || []).flatMap((e) => e.hooks || []);
-  if (existing.some((h) => typeof h.command === 'string' && h.command.includes(AUTO_CHECK_SCRIPT))) {
+  const isOurs = (h) =>
+    (typeof h.command === 'string' && h.command.includes(AUTO_CHECK_SCRIPT)) ||
+    (Array.isArray(h.args) && h.args.some((a) => String(a).includes(AUTO_CHECK_SCRIPT)));
+  if (existing.some(isOurs)) {
     results.push({ layer: 'hooks', item, status: 'skipped', detail: 'hook already present' });
     return results;
   }
@@ -463,7 +472,7 @@ export async function installAutoCheck(ctx) {
     settings.hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
     settings.hooks.SessionStart = [
       ...(settings.hooks.SessionStart || []),
-      { matcher: 'startup', hooks: [{ type: 'command', command: autoCheckCommand(ctx.manifest.skillsCli), timeout: 90 }] },
+      { matcher: 'startup', hooks: [autoCheckHook(ctx.manifest.skillsCli)] },
     ];
     await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, JSON.stringify(settings, null, 2) + String.fromCharCode(10));
