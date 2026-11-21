@@ -279,6 +279,7 @@ test('detectTools: reads each tool marker, in TOOLS order', async () => {
   await mk(dir, 'GEMINI.md', true);
   await mk(dir, '.github/copilot-instructions.md', true);
   await mk(dir, '.agents/mcp_config.json', true);
+  await mk(dir, 'opencode.json', true);
   await mk(dir, 'CLAUDE.md', true);
   assert.deepEqual(await detectTools(dir), TOOLS);
 });
@@ -310,4 +311,28 @@ test('main --tool auto: nothing detected behaves like the default (claude)', asy
   assert.equal(code, 1);
   assert.ok(logs.some((l) => /Detected tools: claude/.test(l)));
   assert.ok(logs.some((l) => /claude/i.test(l) && /error/.test(l)));
+});
+
+test('opencode: parse, tool order, skills id, and a real run writes agents, MCP, and rules', async () => {
+  assert.deepEqual(parseArgs(['--tool', 'opencode']).tools, ['opencode']);
+  assert.deepEqual(parseArgs(['--tool', 'opencode,claude']).tools, ['claude', 'opencode']);
+  assert.ok(TOOLS.includes('opencode'));
+  const dir = await makeTempProject();
+  const f = fakeRunner();
+  const code = await main(['--tool', 'opencode', '--only', 'agents,rules,mcp', '--yes'], { projectDir: dir, env: noClaudeEnv, log() {}, isTTY: false, run: f.run });
+  assert.equal(code, 0);
+  assert.equal(f.calls.length, 0, 'no claude CLI');
+  assert.equal(await exists(path.join(dir, '.opencode/agents/developer.md')), true);
+  assert.equal(await exists(path.join(dir, 'opencode.json')), true);
+  assert.equal(await exists(path.join(dir, 'AGENTS.md')), true);
+  assert.equal(await exists(path.join(dir, '.claude')), false);
+});
+
+test('skills: opencode uses its own skills CLI id and the shared .agents/skills folder', async () => {
+  const dir = await makeTempProject();
+  const f = fakeRunner();
+  const ctx = await ctxFor(dir, ['opencode']);
+  ctx.run = f.run;
+  await installSkills(ctx);
+  assert.ok(f.calls.some((c) => c.args.includes('opencode')));
 });

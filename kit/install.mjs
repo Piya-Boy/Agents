@@ -85,7 +85,7 @@ function isEntryPoint() {
 }
 
 export const LAYERS = ['agents', 'rules', 'skills', 'mcp', 'plugins', 'hooks'];
-export const TOOLS = ['claude', 'codex', 'cursor', 'gemini', 'copilot', 'antigravity'];
+export const TOOLS = ['claude', 'codex', 'cursor', 'gemini', 'copilot', 'antigravity', 'opencode'];
 const TOOL_ALIASES = { agy: 'antigravity' };
 
 const toolsOf = (ctx) => ctx.opts?.tools ?? ['claude'];
@@ -99,6 +99,7 @@ const TOOL_MARKERS = {
   gemini: ['.gemini', 'GEMINI.md'],
   copilot: ['.github/copilot-instructions.md', '.github/agents'],
   antigravity: ['.agents/agents', '.agents/mcp_config.json', '.agents/rules', '.agents/workflows'],
+  opencode: ['.opencode', 'opencode.json', 'opencode.jsonc'],
 };
 
 // Tools whose marker exists in projectDir, in TOOLS order. Falls back to ['claude'] when none.
@@ -481,7 +482,7 @@ async function installSkillsInto(ctx, { agentId, dirParts, useLock, suffix }) {
 }
 
 // Skills CLI agent ids. The CLI writes `.agents/skills/`, which Codex, Cursor, Gemini CLI, and Copilot all read.
-const SKILLS_AGENT_IDS = { codex: 'codex', cursor: 'cursor', gemini: 'gemini-cli', copilot: 'github-copilot', antigravity: 'antigravity-cli' };
+const SKILLS_AGENT_IDS = { codex: 'codex', cursor: 'cursor', gemini: 'gemini-cli', copilot: 'github-copilot', antigravity: 'antigravity-cli', opencode: 'opencode' };
 
 export async function installSkills(ctx) {
   const tools = toolsOf(ctx);
