@@ -228,6 +228,75 @@ export async function installRules(ctx) {
   return results;
 }
 
+const lastLine = (s) => String(s || '').trim().split(/\r?\n/).filter(Boolean).pop() || 'unknown error';
+
+async function readLockSkills(projectDir, log) {
+  try {
+    const lock = JSON.parse(await fs.readFile(path.join(projectDir, 'skills-lock.json'), 'utf8'));
+    return lock.skills && typeof lock.skills === 'object' ? lock.skills : {};
+  } catch (e) {
+    if (e.code !== 'ENOENT') log(`warning: skills-lock.json unreadable (${e.message}); treating as empty`);
+    return {};
+  }
+}
+
+export async function installSkills(ctx) {
+  const results = [];
+  const dryRun = ctx.opts.dryRun;
+  const platform = ctx.platform ?? process.platform;
+  const lock = await readLockSkills(ctx.projectDir, ctx.log);
+  const onDisk = (name) => pathExists(path.join(ctx.projectDir, '.claude', 'skills', name, 'SKILL.md'));
+
+  const addSkill = async (repo, skill, item) => {
+    const args = ['-y', ctx.manifest.skillsCli, 'add', repo, '--agent', 'claude-code', '--skill', skill, '-y'];
+    let r = await ctx.run('npx', args, { cwd: ctx.projectDir });
+    let detail;
+    if (r.code !== 0 && platform === 'win32') {
+      r = await ctx.run('npx', [...args, '--copy'], { cwd: ctx.projectDir });
+      if (r.code === 0) detail = 'copy fallback';
+    }
+    if (r.code !== 0) return { layer: 'skills', item, status: 'failed', detail: lastLine(r.stderr) };
+    return { layer: 'skills', item, status: dryRun ? 'dry-run' : 'installed', ...(detail ? { detail } : {}) };
+  };
+
+  for (const { repo, skills } of ctx.profile.skills) {
+    if (skills === '*') {
+      const have = Object.values(lock).some((e) => e && e.source === repo);
+      results.push(
+        have
+          ? { layer: 'skills', item: `${repo} (all)`, status: 'skipped', detail: 'already in skills-lock.json' }
+          : await addSkill(repo, '*', `${repo} (all)`),
+      );
+      continue;
+    }
+    for (const name of skills) {
+      if (lock[name]?.source === repo || (await onDisk(name))) {
+        results.push({ layer: 'skills', item: name, status: 'skipped', detail: 'already installed' });
+      } else {
+        results.push(await addSkill(repo, name, name));
+      }
+    }
+  }
+
+  for (const name of ctx.profile.bundledSkills) {
+    const dest = path.join(ctx.projectDir, '.claude', 'skills', name);
+    if (await pathExists(dest)) {
+      results.push({ layer: 'skills', item: name, status: 'skipped', detail: 'exists, left untouched' });
+    } else if (dryRun) {
+      results.push({ layer: 'skills', item: name, status: 'dry-run' });
+    } else {
+      try {
+        await fs.mkdir(path.dirname(dest), { recursive: true });
+        await fs.cp(path.join(ctx.kitDir, 'skills', name), dest, { recursive: true, errorOnExist: true, force: false });
+        results.push({ layer: 'skills', item: name, status: 'installed' });
+      } catch (e) {
+        results.push({ layer: 'skills', item: name, status: 'failed', detail: e.message });
+      }
+    }
+  }
+  return results;
+}
+
 export async function main() {
   return 0;
 }
