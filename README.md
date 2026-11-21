@@ -69,20 +69,54 @@ The `web` profile adds `designer`, `web-dev`, and `frontend`, plus the Chrome De
 
 Combine them: `--profile web,superpowers`.
 
-## Useful flags
+## Commands
+
+Run all of these from your project root. Working from a clone? Replace `npx github:Piya-Boy/Agents` with `node path/to/Agents/kit/install.mjs`.
+
+### Recipes
+
+| Goal | Command |
+|---|---|
+| See what would happen, change nothing | `npx github:Piya-Boy/Agents --dry-run` |
+| Install the core profile | `npx github:Piya-Boy/Agents` |
+| Add the web agents, Chrome DevTools MCP, and `ui-ux-pro-max` | `npx github:Piya-Boy/Agents --profile web` |
+| Web plus the `superpowers` plugin | `npx github:Piya-Boy/Agents --profile web,superpowers` |
+| Project files only, no plugins on your machine | `npx github:Piya-Boy/Agents --skip-user` |
+| Skip the confirmation prompts (CI, or no terminal) | `npx github:Piya-Boy/Agents --yes` |
+| `AGENTS.md` already exists: add the kit rules at its end | `npx github:Piya-Boy/Agents --only rules --merge-rules` |
+| Write MCP servers to `.mcp.json` even if a plugin provides them | `npx github:Piya-Boy/Agents --only mcp --force-mcp` |
+| Add only the web MCP server (Chrome DevTools) | `npx github:Piya-Boy/Agents --only mcp --profile web --force-mcp` |
+| Get a reminder when installed skills have updates | `npx github:Piya-Boy/Agents --only hooks` (or add `--auto-check` to a full install) |
+| Everything, including the opt-in extras | `npx github:Piya-Boy/Agents --profile web,superpowers --merge-rules --force-mcp --auto-check` |
+| Update installed skills later (after you review) | `npx skills update -p -y` |
+
+### Flags
 
 | Flag | Meaning |
 |---|---|
-| `--profile NAME[,NAME]` | Profiles to install |
+| `--profile NAME[,NAME]` | Profiles to install: `core` (default, always included), `web`, `superpowers` |
 | `--dry-run` | Print every action, change nothing |
 | `--yes` | Skip the confirmation prompts |
 | `--skip-user` | Do not install plugins (they change your whole machine, not just the project) |
-| `--only agents,rules,skills,mcp,plugins,hooks` | Run only these layers |
+| `--only LAYER[,LAYER]` | Run only these layers (see below) |
 | `--merge-rules` | If `AGENTS.md` already exists, add the kit rules at its end between `<!-- agent-kit:start -->` and `<!-- agent-kit:end -->`. Your text is not changed, and a re-run adds nothing twice |
 | `--force-mcp` | Add the MCP servers to `.mcp.json` even when an installed plugin already provides them (you then get two copies of the tools) |
 | `--auto-check` | Add a project hook that tells you when installed skills have updates. It only reports |
 
-The script is safe to re-run. It skips what already exists and never overwrites your `AGENTS.md`, `CLAUDE.md`, agents, skills, or `.mcp.json` entries. With `--merge-rules` it only adds to the end of an existing `AGENTS.md`.
+### Layers for `--only`
+
+| Layer | What it does | Where it writes |
+|---|---|---|
+| `agents` | Copies the agent files | `.claude/agents/` |
+| `rules` | Creates `AGENTS.md` and `CLAUDE.md` | project root |
+| `skills` | Installs the listed skills | `.claude/skills/`, `skills-lock.json` |
+| `mcp` | Adds MCP servers | `.mcp.json` |
+| `plugins` | Installs plugins | your user profile (`~/.claude/settings.json`) |
+| `hooks` | Adds the skill-update check (opt-in) | `.claude/settings.json`, `.claude/hooks/` |
+
+### Re-running
+
+The script is safe to re-run. It skips what already exists and never overwrites your `AGENTS.md`, `CLAUDE.md`, agents, skills, or `.mcp.json` entries. With `--merge-rules` it only adds to the end of an existing `AGENTS.md`. The summary at the end lists every item as `installed`, `skipped` (with the reason), `failed`, or `dry-run`.
 
 Full reference, troubleshooting, and what lands where: [kit/README.md](kit/README.md).
 
